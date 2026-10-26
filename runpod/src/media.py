@@ -3911,7 +3911,12 @@ def fetch_clean_clip(video_id: str, out_dir: str, start: float, need: float,
     """
     margin = config.CUT_MARGIN_SECONDS if config.CLEAN_CUTS else 0.0
     fetch_start = max(0.0, start - margin)
-    path = _yt_fetch_retry(video_id, out_dir, fetch_start, need + 2 * margin, title)
+    # Cut again right below (tidy_clip re-encodes the clip it keeps): the download is a near-lossless intermediate.
+    token = _ytdlp.TIDY_INTERMEDIATE.set(bool(margin))
+    try:
+        path = _yt_fetch_retry(video_id, out_dir, fetch_start, need + 2 * margin, title)
+    finally:
+        _ytdlp.TIDY_INTERMEDIATE.reset(token)
     if not path:
         return "", True, 0
     if not margin:
@@ -4178,6 +4183,11 @@ def gate_queue_stats() -> dict:
         pass
     try:
         out["grayDecode"] = dict(_filters.GRAY_STATS)
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        # The yt-dlp slots (NETWORK_CONCURRENCY): a download holds its slot through its x264 re-encode too.
+        out["network"] = _ytdlp.net_stats()
     except Exception:  # noqa: BLE001
         pass
     return out
@@ -5362,6 +5372,10 @@ def source_many(jobs: List[Dict[str, Any]], work_dir: str, *,
     t_start = time.time()
     LAST_STATS.clear()
     LAST_STATS.update(scenes=len(jobs))
+    # Never more threads than the machine can serve (machine.source_workers, SOURCE_WORKERS_PER_CPU).
+    from . import machine as _machine
+    asked_workers, workers = workers, _machine.source_workers(workers)
+    LAST_STATS["workers"] = {"asked": int(asked_workers), "used": int(workers)}
     with _LINE_TRACES_LOCK:
         LINE_TRACES.clear()
         _LINE_TRACES_T0[0] = t_start

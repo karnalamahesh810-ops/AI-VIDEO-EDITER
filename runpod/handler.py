@@ -101,6 +101,7 @@ from src import brandkit, clipfx, stockblock
 from src import recut, reclip, relook, restore
 from src import topics
 from src import spares
+from src import machine
 from src import batch, sources
 from src import editing
 from src import datagraphics
@@ -328,6 +329,22 @@ class Reporter:
         # status; a pod has none, so the worker writes it).
         payload["job_progress"] = self._compact(update)
         storage.patch_project(self.project_id, payload)
+
+
+_SAMPLER = [None]
+
+
+def _start_sampler():
+    """A machine sampler for this footage search (src/machine.py), or None with MACHINE_SAMPLE off. One left
+    running by a job that failed mid-search is stopped first: a serverless process keeps its threads."""
+    old = _SAMPLER[0]
+    if old is not None:
+        try:
+            old.stop()
+        except Exception:  # noqa: BLE001 - stats only
+            pass
+    _SAMPLER[0] = machine.Sampler().start() if config.MACHINE_SAMPLE else None
+    return _SAMPLER[0]
 
 
 def _machine() -> dict:
@@ -1344,6 +1361,8 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     report(f"Sourcing media for {total} scenes", 22, done=0, total=total)
     events.phase("source")
     media.reset_cache()
+    # How busy the machine is through the footage search (meta.sourcing.machine, src/machine.py).
+    sampler = _start_sampler()
     # "start" places each line on the timeline for the variety rules (one
     # video's scenes SAME_VIDEO_GAP_SECONDS apart); every line that starts
     # within HOOK_SECONDS is a hook line (best-of search, no generated image);
@@ -1463,7 +1482,11 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     # One sourcing budget for the whole job (every worker shares it).
     from src import ytdlp as _ytdlp_mod
     # One machine per build unless BUILD_FANOUT: its sourcing deadline covers a pass 1 sized by the line count.
-    budget_s = (fanout.source_budget(len(search_jobs)) if fanout.enabled_for(len(search_jobs), project_id or "")
+    # A fast-sourcing job's deadline is its parts' share of the lines (fanout.fast_deadline): every part's pass 1
+    # is cut there, so the workers bill at most that long each.
+    fanned = fanout.enabled_for(len(search_jobs), project_id or "")
+    budget_s = ((fanout.fast_deadline(len(search_jobs)) if fanout.fast_parts(inp) else
+                 fanout.source_budget(len(search_jobs))) if fanned
                 else fanout.single_machine_deadline(len(search_jobs)))
     _ytdlp_mod.set_deadline(time.time() + budget_s)
     print(f"[worker] sourcing budget {budget_s:.0f}s for {len(search_jobs)} scenes"
@@ -1674,6 +1697,8 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     media.LAST_STATS["spares"] = spares.stats()
     media.LAST_STATS["gateQueues"] = media.gate_queue_stats()
     media.LAST_STATS["proxies"] = media.proxy_snapshot()
+    # The machine and how busy the footage search kept it (src/machine.py).
+    media.LAST_STATS["machine"] = dict(machine.describe(), load=sampler.stop().summary() if sampler else {})
     if config.ARCHIVE_RESTORE:
         # What was restored, how, and how long it took (meta.sourcing.archiveRestore).
         media.LAST_STATS["archiveRestore"] = (pool_stats.get("upscale") or {}).pop(
@@ -3205,7 +3230,11 @@ CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "GAMEPLAY_FOOTAGE", "JUDGE_BEST_OF", "EX
                       "INTERPOLATE_60FPS", "INTERPOLATE_SECONDS", "AI_MUSIC", "AI_MUSIC_LM", "AI_MUSIC_WAIT",
                       # Download quality (src/ytdlp.py, 2026-10-15): AV1/VP9 first, one crf-16 re-encode, hero clips
                       # from 1440p; "legacy" = the old H.264-only fetch with ffmpeg's default re-encode, for an A/B.
-                      "DOWNLOAD_QUALITY", "DOWNLOAD_CRF", "DOWNLOAD_PRESET", "HERO_MAX_TBR")
+                      "DOWNLOAD_QUALITY", "DOWNLOAD_CRF", "DOWNLOAD_PRESET", "HERO_MAX_TBR",
+                      # Fast sourcing (2026-10-26; fanout.fold_fast_sourcing): a job's search split over parts,
+                      # one round; the machine sizing (src/machine.py) - each A/B'd on one job.
+                      "SOURCE_PARTS", "SOURCE_PART_ROUNDS", "DOWNLOAD_THREADS", "SOURCE_WORKERS_PER_CPU",
+                      "MACHINE_SAMPLE", "PASS1_SETTLED_EXIT")
 
 
 def _apply_config(overrides) -> dict:
@@ -3521,6 +3550,8 @@ def handler(job):
     # kept out of the story brief, so no model call ever carries it.
     sources.fold_job_switch(inp)
     sources.use_research(inp)
+    # The job's "fast_sourcing" (the app's Fast build switch) as its own overrides: its search split over parts.
+    fanout.fold_fast_sourcing(inp)
     config_before = _apply_config(inp.get("config"))
     action = (inp.get("action") or "build").lower()
     project_id = inp.get("project_id") or ""

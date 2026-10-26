@@ -143,6 +143,8 @@ def reset() -> None:
         _UNAVAILABLE_VIDEOS.clear()
         _DENIED_ON.clear()
     PROXY_MANAGER.reset_stats()
+    if isinstance(_NET_SEM, Slots):
+        _NET_SEM.reset_stats()          # the network queue's waits are counted per job
 
 
 # Round-robin over the configured proxies so one address does not take every
@@ -205,8 +207,13 @@ class Slots:
         self.cond = threading.Condition()
         self.queue: list = []
         self.seq = itertools.count()
+        # Where the network queue waited (meta.sourcing.gateQueues.network): per kind of call, how many got a
+        # slot, the seconds they waited for it, the longest wait, and how many gave up waiting.
+        self.waits: Dict[int, List[float]] = {}
+        self.peak = 0
 
     def acquire(self, priority: int = SEARCH, give_up=None) -> bool:
+        t0 = time.time()
         with self.cond:
             ticket = (priority, next(self.seq))
             heapq.heappush(self.queue, ticket)
@@ -215,13 +222,39 @@ class Slots:
                     if give_up is not None and give_up():
                         self.queue.remove(ticket)
                         heapq.heapify(self.queue)
+                        self._note(priority, time.time() - t0, gave_up=True)
                         return False
                     self.cond.wait(timeout=1.0)
                 heapq.heappop(self.queue)
                 self.busy += 1
+                self.peak = max(self.peak, self.busy)
+                self._note(priority, time.time() - t0)
                 return True
             finally:
                 self.cond.notify_all()          # the next in line may fit as well
+
+    def _note(self, priority: int, waited: float, gave_up: bool = False) -> None:
+        row = self.waits.setdefault(priority, [0, 0.0, 0.0, 0])     # got, seconds, longest, gave up
+        if gave_up:
+            row[3] += 1
+        else:
+            row[0] += 1
+        row[1] += waited
+        row[2] = max(row[2], waited)
+
+    def stats(self) -> dict:
+        names = {DOWNLOAD: "download", METADATA: "metadata", SEARCH: "search"}
+        with self.cond:
+            return {"slots": self.n, "peakBusy": self.peak,
+                    **{names.get(p, str(p)): {"n": int(r[0]), "waitSeconds": round(r[1], 1),
+                                              "meanWait": round(r[1] / max(1, r[0] + r[3]), 2),
+                                              "longestWait": round(r[2], 1), "gaveUp": int(r[3])}
+                       for p, r in sorted(self.waits.items())}}
+
+    def reset_stats(self) -> None:
+        with self.cond:
+            self.waits.clear()
+            self.peak = self.busy
 
     def release(self) -> None:
         with self.cond:
@@ -242,6 +275,11 @@ class Slots:
 
 
 _NET_SEM = Slots(config.NETWORK_CONCURRENCY)
+
+
+def net_stats() -> dict:
+    """The network queue's waits this job (Slots.stats), {} when the queue is a plain semaphore (tests)."""
+    return _NET_SEM.stats() if isinstance(_NET_SEM, Slots) else {}
 
 
 @contextlib.contextmanager
@@ -756,12 +794,35 @@ def _hero_format() -> str:
             + _HIGH_WITH_AUDIO)
 
 
+# A footage section its caller cuts again at once (media.fetch_clean_clip -> filters.tidy_clip, which re-encodes
+# every clip it trims - the file shown is that cut, never this download): fetched as a near-lossless intermediate
+# (DOWNLOAD_TIDY_PRESET / DOWNLOAD_TIDY_CRF) instead of the medium crf-16 encode, which went to waste on the ~4 of 5
+# candidates the gate turns down and was re-encoded anyway on the rest. Set around the download by its caller.
+TIDY_INTERMEDIATE: contextvars.ContextVar = contextvars.ContextVar("tidy_intermediate", default=False)
+
+
+def _tidy_intermediate(audio: bool, hero: bool) -> bool:
+    return bool(TIDY_INTERMEDIATE.get() and not audio and not hero and getattr(config, "DOWNLOAD_TIDY_FAST", True))
+
+
 def _encode_args(audio: bool, hero: bool) -> str:
     """ffmpeg's output options for the section's one re-encode (yt-dlp appends
     them after its own, so they win), as a --downloader-args value."""
     crf = int(getattr(config, "DOWNLOAD_CRF", 16))
     preset = re.sub(r"[^a-z]", "", str(getattr(config, "DOWNLOAD_PRESET", "medium")).lower()) or "medium"
+    if _tidy_intermediate(audio, hero):
+        # Measured on a 16-vCPU pod (2026-10-26, 4 real 1080p clips, 12 s sections, then the worker's own trim):
+        # ultrafast crf 12 took 1.7-2.8 CPU-s a section against medium crf 16's 13.7-21.9, and the clip shown came
+        # out closer to the source (PSNR +1.0-1.4 dB, SSIM up): the trim starts from a cleaner copy.
+        crf = int(getattr(config, "DOWNLOAD_TIDY_CRF", 12))
+        preset = re.sub(r"[^a-z]", "", str(getattr(config, "DOWNLOAD_TIDY_PRESET", "ultrafast")).lower()) or "ultrafast"
     args = f"-c:v libx264 -preset {preset} -crf {crf} -pix_fmt yuv420p"
+    # The encoder's threads sized to the machine (machine.encode_threads: 2 on a 16-core pod running 16
+    # downloads): left to x264, sixteen encodes at once each started ~24 threads on 16 cores.
+    from . import machine
+    threads = machine.encode_threads()
+    if threads > 0:
+        args += f" -threads {int(threads)}"
     if hero:
         args += f' -vf "{_HERO_SCALE}"'
     args += " -c:a aac -b:a 192k" if audio else " -an"

@@ -796,6 +796,19 @@ FANOUT_PARTS = int(os.getenv("FANOUT_PARTS", "10"))
 # FANOUT_PARTS 1); the serverless fallback inherited the template's 10. Renders still spread over the workers
 # (FANOUT_RENDER / POD_RENDER_FANOUT; FANOUT_PARTS still caps their chunks). 1 = the parts as before.
 BUILD_FANOUT = os.getenv("BUILD_FANOUT", "0").strip().lower() in ("1", "true", "yes", "on")
+# Fast sourcing (2026-10-26; the app's "Fast build" switch, a job's {"fast_sourcing": true | N}): one job's footage
+# search split over FAST_SOURCING_PARTS machines - the pod and serverless workers - in one round, each part's pass 1
+# cut at the job's deadline (fanout.fast_deadline: its share of the lines at SINGLE_PASS1_PER_SCENE + the tail,
+# never under FAST_SOURCING_MIN_SECONDS). Costs the workers' time on top of the pod's; off for every job unless it
+# asks (the owner kept one machine per build for cost). FAST_SOURCING=0 refuses every job's ask.
+FAST_SOURCING = _flag("FAST_SOURCING", True)
+FAST_SOURCING_PARTS = int(os.getenv("FAST_SOURCING_PARTS", "4"))
+FAST_SOURCING_MAX_PARTS = int(os.getenv("FAST_SOURCING_MAX_PARTS", "6"))
+FAST_SOURCING_MIN_SECONDS = float(os.getenv("FAST_SOURCING_MIN_SECONDS", "900"))
+# The machines a build's sourcing is split over when BUILD_FANOUT is on (0 = FANOUT_PARTS, which also caps a
+# serverless parent's render chunks), and how many rounds of parts (2 = the empties go out once more).
+SOURCE_PARTS = int(os.getenv("SOURCE_PARTS", "0") or 0)
+SOURCE_PART_ROUNDS = int(os.getenv("SOURCE_PART_ROUNDS", "2"))
 # A build sourced on one machine: pass 1 gets max(PASS1_BUDGET_SECONDS, this x its lines) - every line its share
 # of SOURCE_WORKERS threads (12 s x 16 threads = 192 s a line, SCENE_SECONDS_MIN..MAX; a fan-out part's lines had
 # up to 300 s, a clip-first line that finds its clip takes 75-290 s on the 2026-10-07 replay) - and the job's sourcing
@@ -1162,6 +1175,19 @@ RENDER_KEEP_DIR = os.getenv("RENDER_KEEP_DIR", "")
 # Scenes sourced at once. 8 suited the old 8-vCPU GPU pods; the 32-vCPU CPU
 # workers carry 16 (the work is mostly waiting on network and vision calls).
 SOURCE_WORKERS = int(os.getenv("SOURCE_WORKERS", "16"))
+# Sourcing sized to the machine it runs on (src/machine.py, 2026-10-26). The app's pod env (SOURCE_WORKERS 28,
+# NETWORK_CONCURRENCY 16, VISION_CONCURRENCY 20) was set for 32-core pods; option B builds on 16 cores.
+# MACHINE_CPUS: the cores to size for (0 = the container's real limit: cgroup quota, affinity, host count).
+MACHINE_CPUS = int(os.getenv("MACHINE_CPUS", "0") or 0)
+# DOWNLOAD_THREADS: x264 threads of one YouTube section's re-encode (0 = x264's own: the best throughput on the
+# 16-core pod; 16 encodes at once then hold ~17 GB, a fixed 2 halves that - machine.encode_threads).
+DOWNLOAD_THREADS = int(os.getenv("DOWNLOAD_THREADS", "0") or 0)
+# SOURCE_WORKERS_PER_CPU: sourcing threads a pass may run per core (machine.source_workers); 0 = no clamp.
+SOURCE_WORKERS_PER_CPU = float(os.getenv("SOURCE_WORKERS_PER_CPU", "0") or 0)
+# MACHINE_SAMPLE: the footage search samples the machine's CPU use, memory headroom, throttling and encoder
+# processes every MACHINE_SAMPLE_SECONDS (meta.sourcing.machine). 0 = off.
+MACHINE_SAMPLE = _flag("MACHINE_SAMPLE", True)
+MACHINE_SAMPLE_SECONDS = float(os.getenv("MACHINE_SAMPLE_SECONDS", "5"))
 # Refuse to source a video with an empty AI account (handler._require_ai_credit).
 REQUIRE_AI_CREDIT = os.getenv("REQUIRE_AI_CREDIT", "1").strip().lower() not in ("0", "false", "no")
 MIN_AI_CREDIT = float(os.getenv("MIN_AI_CREDIT", "5"))
@@ -1332,6 +1358,13 @@ DOWNLOAD_CRF = int(os.getenv("DOWNLOAD_CRF", "16"))
 # (Hot Ones 1080p AV1 vs a 2160p reference, 2026-10-15: 97.0 vs 96.5; legacy 95.3).
 DOWNLOAD_PRESET = os.getenv("DOWNLOAD_PRESET", "medium").strip() or "medium"
 HERO_MAX_TBR = int(os.getenv("HERO_MAX_TBR", "9000"))
+# DOWNLOAD_TIDY_FAST: a footage section that is cut again at once (media.fetch_clean_clip -> filters.tidy_clip, which
+# re-encodes every clip it trims) is fetched as a near-lossless intermediate - x264 DOWNLOAD_TIDY_PRESET at
+# DOWNLOAD_TIDY_CRF - instead of the medium crf-16 encode above. 16-vCPU pod, 2026-10-26: 1.7-2.8 vs 13.7-21.9
+# CPU-s a 12 s section, and the clip shown closer to the source (PSNR +1.0-1.6 dB). 0 = the medium encode as before.
+DOWNLOAD_TIDY_FAST = _flag("DOWNLOAD_TIDY_FAST", True)
+DOWNLOAD_TIDY_PRESET = os.getenv("DOWNLOAD_TIDY_PRESET", "ultrafast").strip() or "ultrafast"
+DOWNLOAD_TIDY_CRF = int(os.getenv("DOWNLOAD_TIDY_CRF", "12"))
 
 # --- local vision + upscaling (CPU, no API) -----------------------------------
 # CLIP (ONNX, baked into the image under /opt/models) judges every candidate

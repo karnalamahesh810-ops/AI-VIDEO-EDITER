@@ -83,6 +83,12 @@ RESTORED: Dict[str, dict] = {}
 LAST: dict = {}
 
 
+def _machine_cpus() -> int:
+    """The cores this container may use (src/machine.py): a RunPod pod reports the host's 192 in os.cpu_count()."""
+    from . import machine
+    return machine.cpus()
+
+
 def on() -> bool:
     return bool(getattr(config, "ARCHIVE_RESTORE", False))
 
@@ -652,7 +658,7 @@ def restore_assets(assets: Iterable, box_seconds: float = 0.0) -> dict:
         seen.add(path)
         todo.append((a, path))
     threads = max(1, int(getattr(config, "ARCHIVE_RESTORE_THREADS", 4)))
-    parallel = int(getattr(config, "ARCHIVE_RESTORE_PARALLEL", 0)) or max(1, min(8, (os.cpu_count() or 4) // threads))
+    parallel = int(getattr(config, "ARCHIVE_RESTORE_PARALLEL", 0)) or max(1, min(8, _machine_cpus() // threads))
     records: List[dict] = []
 
     def run(item):

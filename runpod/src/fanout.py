@@ -51,7 +51,7 @@ from . import render as renderer
 def readiness(n_scenes: int, project_id: Optional[str] = None) -> dict:
     """Safe fan-out diagnostics: report missing prerequisites, never secret values."""
     missing = []
-    if config.FANOUT_PARTS < 2:
+    if source_parts() < 2:
         missing.append("worker_slots_must_be_at_least_2")
     if n_scenes < config.FANOUT_MIN_SCENES:
         missing.append("scene_count_below_fanout_minimum")
@@ -64,8 +64,8 @@ def readiness(n_scenes: int, project_id: Optional[str] = None) -> dict:
     if not storage.parallel_storage_enabled():
         missing.append("Supabase worker-storage or service credentials unavailable")
     return {"enabled": not missing,
-            "workerSlots": config.FANOUT_PARTS,
-            "remoteWorkers": max(0, config.FANOUT_PARTS - 1),
+            "workerSlots": source_parts(),
+            "remoteWorkers": max(0, source_parts() - 1),
             "missing": missing}
 
 
@@ -73,6 +73,70 @@ def enabled_for(n_scenes: int, project_id: str) -> bool:
     """A build's sourcing goes to parts on other workers: only with BUILD_FANOUT (off - one machine per build,
     the owner 2026-10-07; renders still spread: render_enabled)."""
     return bool(getattr(config, "BUILD_FANOUT", False)) and readiness(n_scenes, project_id)["enabled"]
+
+
+def source_parts() -> int:
+    """The machines a build's sourcing is split over, this one included: SOURCE_PARTS (a fast-sourcing job's
+    own count, fold_fast_sourcing), else FANOUT_PARTS - which a pod sets to 1 and which also caps a
+    serverless parent's render chunks, so a job's parts never change its render."""
+    return int(getattr(config, "SOURCE_PARTS", 0) or 0) or int(config.FANOUT_PARTS)
+
+
+def fast_parts(inp: dict) -> int:
+    """
+    The machines a job's "fast_sourcing" asks for (this one included), 0 when it asks for none: true means
+    FAST_SOURCING_PARTS, a number that many (2..FAST_SOURCING_MAX_PARTS). Only a plan or a build, and only with
+    FAST_SOURCING on (the switch to turn the option off for every job).
+    """
+    if not getattr(config, "FAST_SOURCING", True):
+        return 0
+    want = inp.get("fast_sourcing")
+    if want is None or want is False or (isinstance(want, str) and want.strip().lower() in ("", "0", "false", "no",
+                                                                                           "off")):
+        return 0
+    if want is True or (isinstance(want, str) and want.strip().lower() in ("1", "true", "yes", "on")):
+        n = int(getattr(config, "FAST_SOURCING_PARTS", 4) or 4)
+    else:
+        try:
+            n = int(want)
+        except (TypeError, ValueError):
+            return 0
+    if n < 2:
+        return 0
+    return min(n, max(2, int(getattr(config, "FAST_SOURCING_MAX_PARTS", 6) or 6)))
+
+
+def fold_fast_sourcing(inp: dict) -> int:
+    """
+    A job's "fast_sourcing" (the app's "Fast build" switch) as its own config overrides, applied with the job's
+    other overrides and put back after it: its footage search is split over fast_parts(inp) machines - the pod
+    and serverless workers - in ONE round (SOURCE_PART_ROUNDS 1: what the parts leave is filled here, never sent
+    out a second time) under a deadline sized by its share of the lines (fast_deadline). The default stays one
+    machine per build (BUILD_FANOUT off: the owner, 2026-10-07). Returns the parts, 0 when off.
+    """
+    action = str(inp.get("action") or "build").lower()
+    n = fast_parts(inp) if action in ("plan", "build") else 0
+    if not n:
+        return 0
+    cfg = dict(inp["config"]) if isinstance(inp.get("config"), dict) else {}
+    cfg.update({"BUILD_FANOUT": "1", "SOURCE_PARTS": str(n), "SOURCE_PART_ROUNDS": "1"})
+    inp["config"] = cfg
+    print(f"[worker] fast sourcing: the footage search is split over {n} machines (this one included)", flush=True)
+    return n
+
+
+def fast_deadline(n_lines: int, parts: Optional[int] = None) -> float:
+    """
+    The sourcing deadline of a fast-sourcing build: each machine's share of the lines at SINGLE_PASS1_PER_SCENE a
+    line, plus SINGLE_TAIL_SECONDS for the fill on this machine, never under FAST_SOURCING_MIN_SECONDS and never
+    past the usual budget (source_budget). Every part's pass 1 is cut at this deadline (run_part), so the parts
+    bill at most this long each.
+    """
+    parts = max(1, int(parts or source_parts()))
+    per = float(getattr(config, "SINGLE_PASS1_PER_SCENE", 12.0) or 12.0)
+    tail = float(getattr(config, "SINGLE_TAIL_SECONDS", 600.0) or 0.0)
+    floor = float(getattr(config, "FAST_SOURCING_MIN_SECONDS", 900.0) or 0.0)
+    return min(source_budget(n_lines), max(floor, per * max(0, n_lines) / parts + tail))
 
 
 def single_machine_deadline(n_lines: int) -> float:
@@ -219,8 +283,7 @@ class _Units:
         if remote_units:
             # Submit all parts concurrently; serial API calls can otherwise
             # leave most of the endpoint idle while the parent waits on HTTP.
-            with ThreadPoolExecutor(max_workers=min(config.FANOUT_PARTS - 1,
-                                                     len(remote_units))) as pool:
+            with ThreadPoolExecutor(max_workers=max(1, min(16, len(remote_units)))) as pool:
                 futures = {pool.submit(_submit, self.payload(unit)): unit
                            for unit in remote_units}
                 for future in as_completed(futures):
@@ -239,8 +302,7 @@ class _Units:
         seen_progress: Dict[str, float] = {}
         seen_states: Dict[str, str] = {}
         poll_delay = 1.0
-        status_pool = ThreadPoolExecutor(max_workers=max(1, min(config.FANOUT_PARTS - 1,
-                                                                  len(pending))))
+        status_pool = ThreadPoolExecutor(max_workers=max(1, min(16, len(pending))))
         while (pending or not self._free()) and time.time() < self.deadline:
             time.sleep(poll_delay)
             here = self._collect_here()
@@ -431,7 +493,7 @@ def source(jobs: List[dict], sequences: List[dict], brief: dict, *, parent_job_i
     # keeps the rest for the last scenes it fills itself.
     def run_round(round_jobs: List[dict], seqs: List[dict], exclude: set, lo: int, hi: int,
                   label: str, first: bool = False) -> None:
-        parts = split(round_jobs, seqs, config.FANOUT_PARTS)
+        parts = split(round_jobs, seqs, source_parts())
         for k, p in enumerate(parts):
             p["weight"] = len(p["jobs"])
             p["image_budget"] = (config.IMAGE_MAX_PER_VIDEO * len(p["jobs"]) // max(1, total_scenes)
@@ -479,7 +541,7 @@ def source(jobs: List[dict], sequences: List[dict], brief: dict, *, parent_job_i
     if ytdlp.past_deadline():
         print(f"[fanout] sourcing time spent; {len(todo)} scene(s) left for animation", flush=True)
         todo = []
-    if len(todo) >= config.FANOUT_REFILL_MIN:
+    if len(todo) >= config.FANOUT_REFILL_MIN and int(getattr(config, "SOURCE_PART_ROUNDS", 2) or 2) >= 2:
         print(f"[fanout] round 2 across workers: {len(todo)} scene(s) "
               f"({len(empty)} empty, {len(dups)} repeats)", flush=True)
         run_round(todo, [], set(seen), 55, 60, "Filling gaps:")
