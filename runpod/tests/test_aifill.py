@@ -80,10 +80,16 @@ class Block(unittest.TestCase):
 
     def test_defaults_and_clamps(self):
         # Budget quality by default (2026-10-25): (20 x $0.035 + 3 x $0.07) x 1.5; standard keeps the old $2.13.
+        # (+ the provider fields of 2026-10-28: Avatarity by default, src/avatarity.py)
+        prov = {"provider": "avatarity", "resolution": "720p", "image_model": "nano-banana-pro",
+                "video_model": "veo-3.1-lite", "max_video_units": config.AVATARITY_MAX_VIDEO_UNITS,
+                "max_av_images": config.AVATARITY_MAX_IMAGES}
         self.assertEqual(aifill.block({"ai_fill": {"enabled": True}}),
-                         {"enabled": True, "max_images": 20, "max_clips": 3, "budget_usd": 1.37, "quality": "budget"})
+                         {"enabled": True, "max_images": 20, "max_clips": 3, "budget_usd": 1.37, "quality": "budget",
+                          **prov})
         self.assertEqual(aifill.block({"ai_fill": {"enabled": True, "quality": "standard"}}),
-                         {"enabled": True, "max_images": 20, "max_clips": 3, "budget_usd": 2.13, "quality": "standard"})
+                         {"enabled": True, "max_images": 20, "max_clips": 3, "budget_usd": 2.13, "quality": "standard",
+                          **prov})
         self.assertEqual(aifill.block({"ai_fill": {"enabled": True, "quality": "ultra"}})["quality"], "budget")
         b = aifill.block({"ai_fill": {"enabled": True, "max_images": 500, "max_clips": 99, "budget_usd": "50"}})
         self.assertEqual((b["max_images"], b["max_clips"], b["budget_usd"]),

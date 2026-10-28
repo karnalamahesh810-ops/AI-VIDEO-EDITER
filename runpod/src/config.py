@@ -215,6 +215,21 @@ AI_FILL_SECONDS = float(os.getenv("AI_FILL_SECONDS", "480"))
 AI_FILL_MAX_BUDGET = float(os.getenv("AI_FILL_MAX_BUDGET", "10"))
 # Every AI picture and clip is looked at once (real-looking, on its line, no garbled text or melted hands).
 AI_FILL_CHECK = _flag("AI_FILL_CHECK", True)
+# Avatarity (src/avatarity.py; the owner's Starter plan, 2026-10-28): the AI provider for AI clips and pictures
+# when AVATARITY_API_KEY is set - AI fill and the whole-video AI mode ask its models first and fall back to the
+# OpenRouter chains above when the plan's allowance is gone. "openrouter": the old chains only.
+AI_PROVIDER = (os.getenv("AI_PROVIDER", "avatarity").strip().lower() or "avatarity")
+AVATARITY_IMAGE_MODEL = os.getenv("AVATARITY_IMAGE_MODEL", "nano-banana-pro").strip()
+AVATARITY_VIDEO_MODEL = os.getenv("AVATARITY_VIDEO_MODEL", "veo-3.1-lite").strip()
+# 720p = 1 unit a clip, then our HD upscale to 1080 (the measured default, docs/avatarity-2026-10-28.md);
+# 1080p = native, 2 units a clip.
+AVATARITY_RESOLUTION = os.getenv("AVATARITY_RESOLUTION", "720p").strip()
+# Hard caps per video on the plan's allowance (a job may set lower ones).
+AVATARITY_MAX_VIDEO_UNITS = int(os.getenv("AVATARITY_MAX_VIDEO_UNITS", "300"))
+AVATARITY_MAX_IMAGES = int(os.getenv("AVATARITY_MAX_IMAGES", "400"))
+# The whole-video AI mode (visual_source "ai", src/aivisuals.py): its AI pass's time box (clips ~40-90 s each,
+# 4 at a time on the Starter plan).
+AI_VISUALS_SECONDS = float(os.getenv("AI_VISUALS_SECONDS", "2700"))
 
 # --- AI director -------------------------------------------------------------
 # Optional. Without it the rule-based planner in director.py runs alone.

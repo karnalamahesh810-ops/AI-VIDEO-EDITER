@@ -113,6 +113,7 @@ from src import shorts
 from src import langversion
 from src.celeb import pipeline as celeb_pipeline
 from src import aifill
+from src import aivisuals
 from src import rendercache
 from src import personera
 from src import gputools
@@ -1396,6 +1397,12 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     # The lines the footage search is for: every line, but the presenter's full-screen ones with a presenter
     # block (a split screen's line keeps its search: its real clip or picture is the right half).
     search_jobs = hy.search_jobs(jobs) if hy is not None else jobs
+    # The whole video from AI clips and pictures (visual_source "ai", src/aivisuals.py): no footage search at all -
+    # every line is left empty here and AI fill's full pass makes them all after the timeline is built.
+    ai_only = aivisuals.wanted(inp)
+    if ai_only:
+        search_jobs = []
+        report("Planning AI visuals (no footage search)", 22)
     # The lines a stopped run of this same video already found judged clips and pictures for (src/resume.py):
     # taken back as they were, never searched or judged again.
     restored = {i: a for i, a in (resume.restore_assets(loaded, work, plan_sig) if loaded else {}).items()
@@ -1505,7 +1512,7 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     # and left out of every search below.
     packed = packs.first_pass(search_jobs, work, require_cc=require_cc) if config.PACKS_FIRST else {}
     open_jobs = [j for j in search_jobs if j["index"] not in packed] if packed else search_jobs
-    pools_wanted = bool(config.SUBJECT_POOLS and inp.get("allow_youtube") is not False)
+    pools_wanted = bool(config.SUBJECT_POOLS and inp.get("allow_youtube") is not False and not ai_only)
     in_parts = bool(pools_wanted and config.POOLS_IN_PARTS and open_jobs
                     and fanout.enabled_for(len(open_jobs), project_id))
     if pools_wanted and not in_parts:
@@ -1621,7 +1628,7 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     rescued: dict = {}
     # Still empty: one last time-boxed pass before the render repeats a shot
     # (the Glen Canyon job repeated ~19 clips across 148 empty scenes).
-    if any(results_by_index[j["index"]] is None for j in fill_jobs):
+    if not ai_only and any(results_by_index[j["index"]] is None for j in fill_jobs):
         n_empty = sum(1 for j in fill_jobs if results_by_index[j["index"]] is None)
         report(f"Finding footage for {n_empty} empty scenes", 62)
         rescued = media.rescue_fill(fill_jobs, results_by_index, work, youtube_only=bool(flags.get("youtube_only")),
@@ -1636,7 +1643,7 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     # Still empty, with the shot cap on: a clip the judge approved for this very line (a runner-up of
     # the clip the variety rules took off it) or for another piece of the same cut beat comes before
     # the ladder's pictures - real footage of the same sentence (src/shotcap.py runner_ups_first).
-    if shotcap.enabled() and any(results_by_index[j["index"]] is None for j in fill_jobs):
+    if not ai_only and shotcap.enabled() and any(results_by_index[j["index"]] is None for j in fill_jobs):
         try:
             first = shotcap.runner_ups_first(fill_jobs, results_by_index, cap_info, held=held)
         except Exception as e:  # noqa: BLE001 - the ladder below
@@ -1652,7 +1659,7 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     # fill gets the planner's graphic or the neighbouring shot held over it
     # once the timeline is built.
     fallback: dict = {}
-    if any(results_by_index[j["index"]] is None for j in fill_jobs):
+    if not ai_only and any(results_by_index[j["index"]] is None for j in fill_jobs):
         if config.NO_REUSE:
             n_left = sum(1 for j in fill_jobs if results_by_index[j["index"]] is None)
             report(f"Filling {n_left} scenes the footage search ran out of time for", 63)
@@ -1665,7 +1672,7 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
             rescued["reused"] = media.fill_from_story(fill_jobs, results_by_index, max_uses=config.REUSE_MAX_USES)
     # Stills to clips (the owner, 2026-10-26: the Hoover Dam video was 57 % stills, up to 8 in a row): a still a
     # clip may replace takes another moment of the clip beside it, or a spare clip judged for its line.
-    if config.STILLS_TO_CLIPS and any(r is not None and r.kind == "image" for r in results_by_index):
+    if not ai_only and config.STILLS_TO_CLIPS and any(r is not None and r.kind == "image" for r in results_by_index):
         report("Swapping still pictures for clips", 63)
         try:
             pool_stats["stillClips"] = media.stills_to_chains(fill_jobs, results_by_index, work)
@@ -1770,9 +1777,10 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         # the search, the pools, the rescue and the ladder have all had their turn - gets an AI picture (a few key
         # ones an AI clip) before any hold, borrowed picture or text card below. Without the block nothing runs.
         aifill.set_story(brief)
-        report("Making AI pictures for the lines with no footage")
+        report("Making the AI clips and pictures" if ai_only else "Making AI pictures for the lines with no footage")
         try:
-            aifill.fill_doc(doc, work=work, story=brief, label="after the footage search", report=report)
+            aifill.fill_doc(doc, work=work, story=brief, label="whole video (AI visuals)" if ai_only
+                            else "after the footage search", report=report)
         except Exception as e:  # noqa: BLE001 - AI fill never fails a video
             print(f"[worker] AI fill skipped: {type(e).__name__}: {str(e)[:120]}", flush=True)
     # (d) the last resort for a line the ladder could not fill: the planner's
@@ -2108,6 +2116,16 @@ def do_resource(inp: dict, work: str, report: Reporter) -> tuple:
         raise ValueError(f"scene_index must be between 0 and {len(scenes) - 1}")
 
     scene = scenes[idx]
+    if str(inp.get("mode") or "").lower() in ("ai_image", "ai_clip"):
+        # The editor's "Regenerate picture / clip" (src/aivisuals.py): a new AI picture - for a clip, animated from
+        # it - from the scene's (edited) AI prompt. Timing untouched; nothing passed = the scene keeps its media.
+        mode = str(inp.get("mode")).lower()
+        report(f"Making a new AI {'clip' if mode == 'ai_clip' else 'picture'} for scene {idx + 1}", 10)
+        got = aivisuals.regenerate(doc, idx, mode, str(inp.get("ai_prompt") or ""), inp, work, report)
+        inp["_ai_usage"] = got.get("usage")
+        if not got.get("ok"):
+            raise ValueError(got.get("error") or "no new picture was made")
+        return doc, []
     if str((scene.get("media") or {}).get("source") or "") == "ai-presenter":
         # Its lips follow the voice: found footage in its place would leave the presenter's line without them.
         raise ValueError("This is the AI presenter talking - it cannot be replaced with a found clip. "
@@ -3268,7 +3286,9 @@ CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "GAMEPLAY_FOOTAGE", "JUDGE_BEST_OF", "EX
                       "PERSON_CLIPS_FIRST", "STILL_FRAME", "STILL_CARD_UPSCALE", "STILL_PEAK_MAGNIFICATION",
                       "STILL_MOTION_MAX_ZOOM", "PICTURE_COPY_CHECK", "PICTURE_COPY_BITS", "LOOK_PLACE_ON_BUILD",
                       "STILLS_TO_CLIPS_MAX_RUN", "VISION_NEWS_CREATOR_MARKS", "SLIP_CHECKS", "AI_FILL_NEWS_EVENTS",
-                      "AI_FILL_LABEL", "LOOKS_END_AT_CUTS", "DATES_ONE_PLACE")
+                      "AI_FILL_LABEL", "LOOKS_END_AT_CUTS", "DATES_ONE_PLACE",
+                      # The whole-video AI mode (src/aivisuals.py) sets these per job.
+                      "AI_FILL_SECONDS", "AI_FILL_PARALLEL", "AI_FILL_CLIP_PARALLEL")
 
 
 def _apply_config(overrides) -> dict:
@@ -3562,6 +3582,11 @@ def handler(job):
             kit = brandkit.from_doc(inp["timeline"])
         if kit is not None:
             print(f"[worker] brand kit: {kit['name']} ({brandkit.describe(kit)})", flush=True)
+    if act == "resource" and str(inp.get("mode") or "").lower() in ("ai_image", "ai_clip"):
+        inp["allow_youtube"] = False            # an AI regenerate never needs the YouTube connection
+    if aivisuals.wanted(inp) and act in ("plan", "build", "resource", "render"):
+        # The whole video from AI clips and pictures (src/aivisuals.py): its AI fill block, pacing and switches.
+        aivisuals.prepare_input(inp)
     if act in ("plan", "build", "resource"):
         vstyle = styles.apply(inp)
         if vstyle:
@@ -4053,6 +4078,7 @@ def handler(job):
                 })
             costs.measure_end()
             return {"ok": True, "action": "resource", "timeline": doc,
+                    **({"aiUsage": inp["_ai_usage"]} if inp.get("_ai_usage") else {}),
                     "scene_index": inp.get("scene_index"),
                     "mode": str(inp.get("mode") or "replace"),
                     "candidates": candidates,

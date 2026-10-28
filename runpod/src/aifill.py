@@ -177,8 +177,9 @@ def block(inp: Optional[dict]) -> Optional[Dict[str, Any]]:
     from . import styles
     if styles.resolve(inp.get("video_style")) == "ai_presenter":
         return None
-    max_images = _int(raw.get("max_images"), DEFAULT_MAX_IMAGES, 0, MAX_IMAGES_LIMIT)
-    max_clips = min(_int(raw.get("max_clips"), DEFAULT_MAX_CLIPS, 0, MAX_CLIPS_LIMIT), max_images)
+    full = bool(raw.get("full"))          # the whole video (src/aivisuals.py): every line, far higher caps
+    max_images = _int(raw.get("max_images"), DEFAULT_MAX_IMAGES, 0, 400 if full else MAX_IMAGES_LIMIT)
+    max_clips = min(_int(raw.get("max_clips"), DEFAULT_MAX_CLIPS, 0, 300 if full else MAX_CLIPS_LIMIT), max_images)
     quality = quality_of(raw.get("quality"))
     try:
         budget = float(raw.get("budget_usd"))
@@ -191,12 +192,53 @@ def block(inp: Optional[dict]) -> Optional[Dict[str, Any]]:
         return None
     out = {"enabled": True, "max_images": max_images, "max_clips": max_clips, "budget_usd": budget,
            "quality": quality}
+    # Avatarity (src/avatarity.py, 2026-10-28): the provider and models a job picked (the app's model picker);
+    # its plan allowance is counted in units, never in this USD budget (which still covers OpenRouter: prompts,
+    # checks and any picture or clip that falls back to it).
+    out.update(provider_fields(raw))
+    for key in ("full", "clip_pct", "look", "style_notes", "prompts"):
+        if key in raw:
+            out[key] = raw[key]
     # A job's own chains (an A/B, or the bake-off's winner before it becomes a default): [[model, size], ...].
     for key in ("image_models", "video_models"):
         got = _model_list(raw.get(key))
         if got:
             out[key] = got
     return out
+
+
+def provider_fields(raw: Optional[dict]) -> Dict[str, Any]:
+    """provider / image_model / video_model / resolution / unit caps of a job's ai_fill or ai_visuals block,
+    normalised (defaults: config.AI_PROVIDER, Nano Banana Pro, Veo 3.1 Lite, 720p)."""
+    from . import avatarity
+    raw = raw if isinstance(raw, dict) else {}
+    prov = str(raw.get("provider") or config.AI_PROVIDER or "avatarity").strip().lower()
+    prov = prov if prov in ("avatarity", "openrouter") else "avatarity"
+    img = avatarity.bare(str(raw.get("image_model") or "").strip())
+    vid = avatarity.bare(str(raw.get("video_model") or "").strip())
+    res = "1080p" if str(raw.get("resolution") or config.AVATARITY_RESOLUTION) == "1080p" else "720p"
+    out: Dict[str, Any] = {"provider": prov, "resolution": res,
+                           "max_video_units": _int(raw.get("max_video_units"), config.AVATARITY_MAX_VIDEO_UNITS, 0,
+                                                   config.AVATARITY_MAX_VIDEO_UNITS),
+                           "max_av_images": _int(raw.get("max_av_images", raw.get("max_images_avatarity")),
+                                                 config.AVATARITY_MAX_IMAGES, 0, config.AVATARITY_MAX_IMAGES)}
+    if prov == "avatarity":
+        out["image_model"] = img if img in avatarity.IMAGE_MODELS else config.AVATARITY_IMAGE_MODEL
+        out["video_model"] = vid if vid in avatarity.VIDEO_MODELS else config.AVATARITY_VIDEO_MODEL
+    else:
+        # OpenRouter ids picked in the app lead their chains.
+        if re.fullmatch(r"[\w.-]+/[\w.:-]+", img or ""):
+            out["or_image_model"] = img
+        if re.fullmatch(r"[\w.-]+/[\w.:-]+", vid or ""):
+            out["or_video_model"] = vid
+    return out
+
+
+def _avatarity_on() -> bool:
+    from . import avatarity
+    b = _STATE.get("block") or {}
+    return b.get("provider", config.AI_PROVIDER) == "avatarity" and avatarity.configured() \
+        and not _STATE.get("av_gone")
 
 
 def _model_list(value: Any) -> List[Tuple[str, str]]:
@@ -250,8 +292,7 @@ def _quality_now(quality: Optional[str] = None) -> str:
     return quality_of(quality if quality else (_STATE.get("block") or {}).get("quality"))
 
 
-def image_models(quality: Optional[str] = None) -> List[Tuple[str, str]]:
-    """The picture models in the order tried: the job's own chain, else its quality's (budget: 1K pictures)."""
+def _base_images(quality: Optional[str]) -> List[Tuple[str, str]]:
     own = (_STATE.get("block") or {}).get("image_models") if quality is None else None
     if own:
         return list(own)
@@ -260,8 +301,7 @@ def image_models(quality: Optional[str] = None) -> List[Tuple[str, str]]:
     return _models(config.AI_FILL_IMAGE_MODELS, _BUDGET_IMAGES)
 
 
-def video_models(quality: Optional[str] = None) -> List[Tuple[str, str]]:
-    """The clip models in the order tried: the job's own chain, else its quality's (budget: 480p, sharpened)."""
+def _base_clips(quality: Optional[str]) -> List[Tuple[str, str]]:
     own = (_STATE.get("block") or {}).get("video_models") if quality is None else None
     if own:
         return list(own)
@@ -270,12 +310,53 @@ def video_models(quality: Optional[str] = None) -> List[Tuple[str, str]]:
     return _models(config.AI_FILL_VIDEO_MODELS, _BUDGET_CLIPS)
 
 
+def image_models(quality: Optional[str] = None) -> List[Tuple[str, str]]:
+    """The picture models in the order tried: Avatarity's (the job's pick, 2K) first while its plan allowance
+    lasts, then the job's own OpenRouter chain, else its quality's (budget: 1K pictures)."""
+    from . import avatarity
+    b = _STATE.get("block") or {}
+    chain = _base_images(quality)
+    if b.get("or_image_model"):
+        chain = [(b["or_image_model"], "1K")] + [c for c in chain if c[0] != b["or_image_model"]]
+    if quality is None and _avatarity_on():
+        chain = [(avatarity.PREFIX + (b.get("image_model") or config.AVATARITY_IMAGE_MODEL), "2K")] + chain
+    return chain
+
+
+def video_models(quality: Optional[str] = None) -> List[Tuple[str, str]]:
+    """The clip models in the order tried: Avatarity's Veo (720p, our HD upscale after, or native 1080p) first
+    while its plan allowance lasts, then the OpenRouter chain (budget: 480p, sharpened)."""
+    from . import avatarity
+    b = _STATE.get("block") or {}
+    chain = _base_clips(quality)
+    if b.get("or_video_model"):
+        chain = [(b["or_video_model"], "720p")] + [c for c in chain if c[0] != b["or_video_model"]]
+    if quality is None and _avatarity_on():
+        chain = [(avatarity.PREFIX + (b.get("video_model") or config.AVATARITY_VIDEO_MODEL),
+                  b.get("resolution") or config.AVATARITY_RESOLUTION)] + chain
+    return chain
+
+
 def image_usd(model: str, size: str) -> float:
+    if str(model).startswith("avatarity/"):
+        return 0.0                                  # the plan's allowance (counted in units), not dollars
     prices = IMAGE_PRICES.get(model)
     if prices:
         return float(prices.get(size, max(prices.values())))
     from .presenter import tiers
     return tiers.image_usd(model, size or "1K") if tiers.model_info(model) else 0.08
+
+
+def clip_usd_per_second(model: str, res: str) -> float:
+    if str(model).startswith("avatarity/"):
+        return 0.0
+    from .presenter import tiers
+    return tiers.usd_per_second(model, res)
+
+
+def clip_max_seconds(model: str) -> float:
+    """The longest line one clip of this model covers at real speed (Veo on Avatarity: ~8 s, a 0.5 s handle)."""
+    return 8.0 if str(model).startswith("avatarity/") else float(CLIP_MAX_SECONDS)
 
 
 # ------------------------------------------------------------------ the job
@@ -368,7 +449,28 @@ def can_make() -> bool:
         return _images_left() > 0 and budget is not None and budget.left() >= cheapest
 
 
+def _av_caps() -> None:
+    """Past this video's Avatarity caps (max_video_units / max_av_images): the rest falls back to OpenRouter."""
+    from . import avatarity
+    b = _STATE.get("block") or {}
+    if _STATE.get("av_gone") or not b:
+        return
+    led = avatarity.ledger()
+    if led.get("videoUnits", 0) >= int(b.get("max_video_units", config.AVATARITY_MAX_VIDEO_UNITS)) or             led.get("images", 0) >= int(b.get("max_av_images", config.AVATARITY_MAX_IMAGES)):
+        _STATE["av_gone"] = "this video's Avatarity cap"
+        _STATE.setdefault("fallbacks", []).append("This video's Avatarity cap was reached: the rest was made on "
+                                                  "OpenRouter")
+
+
+def note_fallback(text: str) -> None:
+    with _LOCK:
+        fb = _STATE.setdefault("fallbacks", [])
+        if text not in fb:
+            fb.append(text)
+
+
 def _take_image() -> bool:
+    _av_caps()
     with _LOCK:
         budget = _STATE.get("budget")
         if _STATE.get("stopped") or _images_left() <= 0 or budget is None or \
@@ -389,6 +491,7 @@ def _done_image(ok: bool) -> None:
 
 def _take_clip(projected: float, pictures_to_come: int) -> bool:
     """A clip may start: under max_clips, and the budget still holds every picture this pass is to make."""
+    _av_caps()
     with _LOCK:
         budget = _STATE.get("budget")
         if _STATE.get("stopped") or _clips_left() <= 0 or budget is None:
@@ -414,7 +517,12 @@ def _tools(work: str):
         if _STATE.get("checker") is not None:
             return _STATE["provider"], _STATE["store"], _STATE["cache"], _STATE["checker"]
         from .presenter import checks, providers, store as store_mod
-        prov = _STATE.get("provider") or providers.OpenRouter()
+        prov = _STATE.get("provider")
+        if prov is None:
+            # Avatarity first (src/avatarity.py: models "avatarity/<id>"), OpenRouter for every other model,
+            # the prompt model and the look checks.
+            from . import avatarity
+            prov = avatarity.provider() if _avatarity_on() else providers.OpenRouter()
         if not prov.available():
             _stop("no OpenRouter key is configured")
             return None
@@ -668,11 +776,34 @@ def _person(job: dict, story: dict) -> bool:
     return str(job.get("subject_type") or "") == "person" and not _rules_intent(job)
 
 
+# The whole-video AI mode's looks (the app's Look picker): how the picture is made; photoreal is the default.
+LOOKS = {
+    "photoreal": ("A real documentary photograph", "Photojournalism shot on a professional camera with a natural "
+                  "lens: real textures, wear and small imperfections, true-to-life colours, gentle depth of field."),
+    "cinematic": ("A cinematic film still", "Shot on a large-format cinema camera with anamorphic lenses: dramatic "
+                  "natural light, rich but believable colour grade, shallow depth of field, real textures."),
+    "archival": ("A vintage archival photograph", "Period film stock: soft grain, faded colours or black and white, "
+                 "the look of a real photograph from its era."),
+    "3d": ("A detailed 3D render", "Physically based rendering, realistic materials and global illumination, "
+           "clean composition."),
+    "anime": ("A hand-painted anime film frame", "Detailed background art, soft cel shading, expressive light, "
+              "consistent character design."),
+}
+
+
+def _look() -> Tuple[str, str]:
+    b = _STATE.get("block") or {}
+    head, tail = LOOKS.get(str(b.get("look") or "photoreal").lower(), LOOKS["photoreal"])
+    notes = _clean(b.get("style_notes"), 400)
+    return head, (tail + (f" Style notes: {notes}." if notes else ""))
+
+
 def compose(what: str, bible: Dict[str, str], line: str = "", person: bool = False) -> str:
     """The image model's prompt: the picture, the story's world (the bible), the documentary look, the people
     rule and no text - for the rule-built description and the model-written one alike."""
     frame = bible.get("framing") or ""
-    parts = [f"A real documentary photograph, 16:9{', ' + frame if frame else ''}: {what.strip().rstrip('.')}."]
+    head, tail = _look()
+    parts = [f"{head}, 16:9{', ' + frame if frame else ''}: {what.strip().rstrip('.')}."]
     if line and not person:
         parts.append(f"The narration at this moment says: \"{line}\" - show what it is about, never its words.")
     where = "; ".join(x for x in (f"Setting: {bible['place']}" if bible.get("place") else "",
@@ -682,8 +813,7 @@ def compose(what: str, bible: Dict[str, str], line: str = "", person: bool = Fal
                                   f"colours: {bible['palette']}" if bible.get("palette") else "") if x)
     if where:
         parts.append(where + ".")
-    parts.append("Photojournalism shot on a professional camera with a natural lens: real textures, wear and small "
-                 "imperfections, true-to-life colours, gentle depth of field.")
+    parts.append(tail)
     period = _period(bible.get("era") or "")
     if period:
         parts.append(period)
@@ -693,8 +823,9 @@ def compose(what: str, bible: Dict[str, str], line: str = "", person: bool = Fal
     else:
         parts.append("People, if any, are ordinary and anonymous: at a distance, from behind or out of focus; hands "
                      "natural with five fingers.")
-    parts.append("No text anywhere: no readable signs, captions, labels, numbers, logos, brand names or watermarks. "
-                 "One single photograph - not a collage, an illustration, a painting, a 3D render, a map or a chart.")
+    parts.append("No text anywhere: no readable signs, captions, labels, numbers, dates, logos, brand names or "
+                 "watermarks; no frame, border or polaroid edge. One single full-bleed image - not a collage, a map "
+                 "or a chart.")
     return " ".join(p for p in parts if p)
 
 
@@ -732,6 +863,21 @@ def _beat_of(doc: dict, scene: dict) -> int:
     if flashes:
         return n - len(flashes) + int(teaser.get("droppedBeats") or 0)
     return n
+
+
+def user_prompt(scene: dict, index: int) -> Dict[str, str]:
+    """A scene's own prompt from the job (block "prompts": {scene id or index: {"still", "motion"}} or a string),
+    else the one the editor saved on it (semanticMetadata.aiPrompt / aiMotion)."""
+    b = _STATE.get("block") or {}
+    got = (b.get("prompts") or {}) if isinstance(b.get("prompts"), dict) else {}
+    own = got.get(str(scene.get("id") or "")) or got.get(str(index))
+    if isinstance(own, str):
+        own = {"still": own}
+    if not isinstance(own, dict):
+        sem = scene.get("semanticMetadata") or {}
+        own = {"still": sem.get("aiPromptEdited") and sem.get("aiPrompt") or "", "motion": sem.get("aiMotionEdited")
+               and sem.get("aiMotion") or ""}
+    return {k: _clean(own.get(k), 900) for k in ("still", "motion") if _clean(own.get(k), 900)}
 
 
 def _key(scene: dict) -> str:
@@ -826,6 +972,11 @@ def _lines(doc: dict, only: Optional[Sequence[dict]], story: dict, why: str) -> 
             continue
         beat = _beat_of(doc, s)
         prompt, what, person = still_prompt(job, story, beat)
+        own = user_prompt(s, i)
+        if own.get("still"):
+            # The user's (or the editor's) own words for this picture win over the planner and the prompt model.
+            what = own["still"]
+            prompt = compose(what, bible_for(job, story, beat), "", person)
         out.append(Line(scene=s, index=i, key=key, start=int(s.get("startFrame") or 0) / fps, seconds=seconds,
                         hook=int(s.get("startFrame") or 0) / fps < float(config.HOOK_SECONDS), beat=beat,
                         opens_section=beat in starts, run=run[i], what=what, prompt=prompt,
@@ -834,6 +985,10 @@ def _lines(doc: dict, only: Optional[Sequence[dict]], story: dict, why: str) -> 
                         before=_clean(scenes[i - 1].get("text"), 200) if i > 0 else "",
                         after=_clean(scenes[i + 1].get("text"), 200) if i + 1 < len(scenes) else "",
                         bible=bible_for(job, story, beat), rules=_rules_intent(job)))
+        if own.get("still"):
+            out[-1].described = "user"
+        if own.get("motion"):
+            out[-1].motion = own["motion"]
     hook = [ln for ln in out if ln.hook]
     rest = [ln for ln in out if not ln.hook]
     order = {id(ln): r for r, ln in enumerate(rest[k] for k in gapfill.spread(len(rest)))}
@@ -843,11 +998,28 @@ def _lines(doc: dict, only: Optional[Sequence[dict]], story: dict, why: str) -> 
 
 def _key_lines(lines: Sequence[Line]) -> List[str]:
     """The lines a clip is made for (by key), the most worth it first: the opening, then a story section's first
-    line, then the longest - each 2.5-5.5 s, so a 4-6 s clip covers it at real speed."""
-    fits = [ln for ln in lines if CLIP_MIN_SCENE <= ln.seconds <= CLIP_MAX_SECONDS - CLIP_HANDLE and not ln.person]
-    fits.sort(key=lambda ln: (0 if ln.hook else 1 if ln.opens_section else 2, ln.start if ln.hook else -ln.seconds))
+    line, then the longest - each 2.5 s up to what one clip covers at real speed (4-6 s clips on OpenRouter, ~8 s
+    Veo on Avatarity). The whole-video AI mode (block "full") instead spreads clips over the video by screen time
+    until its clip_pct share is reached (error diffusion in time order: never all clips at the start)."""
+    chain = video_models()
+    longest = clip_max_seconds(chain[0][0]) if chain else float(CLIP_MAX_SECONDS)
+    b = _STATE.get("block") or {}
     with _LOCK:
         n = max(0, _clips_left())
+    if b.get("full"):
+        pct = max(0.0, min(1.0, float(b.get("clip_pct", 70)) / 100.0))
+        fits = sorted([ln for ln in lines if 1.2 <= ln.seconds <= longest - CLIP_HANDLE and not ln.person],
+                      key=lambda ln: ln.start)
+        acc, chosen = 0.0, []
+        for ln in fits:
+            acc += pct * ln.seconds
+            if ln.hook or acc >= ln.seconds / 2:
+                chosen.append(ln)
+                acc -= ln.seconds
+        chosen.sort(key=lambda ln: (0 if ln.hook else 1, ln.start))
+        return [ln.key for ln in chosen[:n]]
+    fits = [ln for ln in lines if CLIP_MIN_SCENE <= ln.seconds <= longest - CLIP_HANDLE and not ln.person]
+    fits.sort(key=lambda ln: (0 if ln.hook else 1 if ln.opens_section else 2, ln.start if ln.hook else -ln.seconds))
     return [ln.key for ln in fits[:n]]
 
 
@@ -873,6 +1045,18 @@ flows, dust drifts, leaves sway). Nothing new enters the frame.
 Rules for every picture: the real place and time the story tells; no famous or real named person - people only \
 ordinary and anonymous, at a distance, from behind or out of focus; no readable text, signs, labels, screens, \
 logos or brand names; no maps, charts, diagrams or collages."""
+# The whole-video AI mode (src/aivisuals.py): every line is AI, so the shots must vary and move like an edit.
+FULL_EXTRA = (
+    "\n\n"
+    "This whole video is made of AI pictures and clips (no real footage at all), so plan it like an editor: vary the "
+    "framing from line to line (aerial, wide establishing, medium, close-up, macro detail, ground-level) and never "
+    "repeat the same framing of the same subject on two lines in a row; keep recurring places and things consistent "
+    "(same architecture, same landscape, same season and light as the story). For motion: one Veo-friendly camera verb "
+    "(slow dolly in, push in, pull back, pan left/right, tilt up/down, drone glide, orbit, crane up, static "
+    "locked-off) plus the natural movement in the scene. A real, named person is never shown - show the place, the object or "
+    "an anonymous detail instead; a news event is shown as the weather, water, land or building it is about, never as "
+    "a TV broadcast, a chyron or an official at a podium."
+)
 DESCRIBE_USD = 0.02         # the most one description call may cost (google/gemini-2.5-flash: ~$0.002 for 20 lines)
 DESCRIBE_LINES = 30         # lines per call
 
@@ -919,7 +1103,8 @@ def describe(lines: Sequence[Line], story: dict, tools) -> int:
                  **({"planner": ln.what} if ln.what and not ln.rules and not ln.person else {})}
                 for n, ln in enumerate(chunk)]
         messages = [{"role": "system", "content": DESCRIBE_SYSTEM},
-                    {"role": "user", "content": DESCRIBE_INSTRUCTIONS + "\n\n" + json.dumps(
+                    {"role": "user", "content": DESCRIBE_INSTRUCTIONS + (
+                        FULL_EXTRA if (_STATE.get("block") or {}).get("full") else "") + "\n\n" + json.dumps(
                         {"story": _story_brief(story), "lines": rows}, ensure_ascii=False)}]
         key = hashlib.sha256(json.dumps([models, messages], sort_keys=True).encode("utf-8")).hexdigest()[:32]
         name = f"describe_{key}.json"
@@ -969,6 +1154,9 @@ def describe(lines: Sequence[Line], story: dict, tools) -> int:
         model_bible = {k: _clean(v, 120) for k, v in (got.get("bible") or {}).items()
                        if k in ("place", "era", "season", "light", "palette") and v} \
             if isinstance(got.get("bible"), dict) else {}
+        if model_bible:
+            with _LOCK:
+                _STATE["bible"] = dict(model_bible)
         for row in got["lines"]:
             if not isinstance(row, dict):
                 continue
@@ -1107,6 +1295,11 @@ def make_still(line: Line, tools) -> Optional[Made]:
             if _model_gone(e):
                 with _LOCK:
                     _STATE["unavailable"].add(model)
+                    if str(model).startswith("avatarity/"):
+                        _STATE["av_gone"] = str(e)[:120]
+                        fb = _STATE.setdefault("fallbacks", [])
+                        if not any("Avatarity" in x for x in fb):
+                            fb.append("Avatarity's plan allowance was not available: the rest was made on OpenRouter")
                 print(f"[aifill] {model} is not available: {str(e)[:120]}", flush=True)
                 k += 1
                 continue
@@ -1138,6 +1331,8 @@ def make_still(line: Line, tools) -> Optional[Made]:
 def _clip_len(model: str, seconds: float) -> Optional[int]:
     from .presenter import tiers
     need = seconds + CLIP_HANDLE
+    if str(model).startswith("avatarity/"):
+        return 8 if need <= 8.0 + 1e-6 else None   # Veo on Avatarity: ~8 s, its length cannot be set
     durations = sorted(int(d) for d in (tiers.model_info(model).get("durations") or [4, 5, 6, 8]))
     for d in durations:
         if d + 1e-6 >= max(need, CLIP_MIN_SECONDS):
@@ -1227,7 +1422,7 @@ def make_clip(line: Line, still: Made, tools) -> Optional[Made]:
                 url, cached = str(hit.get("url") or ""), str(hit.get("cached") or "disk")
             else:
                 budget = _STATE["budget"]
-                projected = round(seconds * tiers.usd_per_second(model, res) * 1.05 + 0.02, 4)
+                projected = round(seconds * clip_usd_per_second(model, res) * 1.05 + 0.02, 4)
                 ticket = budget.reserve(projected, f"{line.scene.get('id')} AI clip")
                 try:
                     job = prov.submit_video(req)
@@ -1264,6 +1459,11 @@ def make_clip(line: Line, still: Made, tools) -> Optional[Made]:
             if _model_gone(e):
                 with _LOCK:
                     _STATE["unavailable"].add(model)
+                    if str(model).startswith("avatarity/"):
+                        _STATE["av_gone"] = str(e)[:120]
+                        fb = _STATE.setdefault("fallbacks", [])
+                        if not any("Avatarity" in x for x in fb):
+                            fb.append("Avatarity's plan allowance was not available: the rest was made on OpenRouter")
                 print(f"[aifill] {model} is not available: {str(e)[:120]}", flush=True)
                 tries -= 1                      # nothing was paid: the next model gets the try
             why.append(f"{model}: {str(e)[:140]}")
@@ -1291,7 +1491,11 @@ def make_clip(line: Line, still: Made, tools) -> Optional[Made]:
             why.append(f"{model}: the check turned it down ({', '.join(issues)[:80]})")
             continue
         costs.record("aivideo.screen_seconds", min(line.seconds, keep))
-        sharpened = sharpen(clip)
+        if str(model).startswith("avatarity/"):
+            from . import avatarity
+            sharpened = avatarity.hd_upscale(clip) if res != "1080p" else ""     # 720p + our HD upscale
+        else:
+            sharpened = sharpen(clip)
         info = media_io.probe(clip)
         with _LOCK:
             _STATE["models_used"][model] += 1
@@ -1363,6 +1567,15 @@ def _apply(doc: dict, line: Line, still: Made, clip: Optional[Made], label: str)
                      **({"motionPrompt": clip.prompt[:400]} if clip else {}),
                      **({"cached": made.cached} if made.cached else {}),
                      "checks": {k: v for k, v in (made.checks or {}).items() if k in ("look",)}}
+    # The editor's "AI prompt" box: the scene description alone (the look and the no-text rules are added again on
+    # every make) and the clip's motion line; Regenerate reads them back (user_prompt).
+    sem["aiPrompt"] = _clean(line.what, 900)
+    if clip:
+        sem["aiMotion"] = _clean(line.motion, 400)
+    sem["aiFill"]["provider"] = "avatarity" if str(made.model).startswith("avatarity/") else "openrouter"
+    if str(made.model).startswith("avatarity/"):
+        sem["aiFill"]["units"] = {"video": (2 if (clip and clip.height >= 1080 and "1080" in str(
+            (_STATE.get("block") or {}).get("resolution"))) else 1) if clip else 0, "images": 1}
     gapfill.drop_cards(doc, [s])
     if not clip:
         k = next((n for n, x in enumerate(doc.get("scenes") or []) if x is s), -1)
@@ -1405,7 +1618,8 @@ def fill_doc(doc: dict, *, work: str = "", story: Optional[dict] = None, only: O
         return out
     try:
         # The lines about to be made (a few spares for the ones that fail), described by the prompt model.
-        out["described"] = describe(lines[:max(1, _images_left()) + 4], story, tools)
+        out["described"] = describe([ln for ln in lines if ln.described != "user"][:max(1, _images_left()) + 4],
+                                    story, tools)
     except Exception as e:  # noqa: BLE001 - the rule-built prompts stand
         traceback.print_exc()
         print(f"[aifill] descriptions skipped: {type(e).__name__}: {str(e)[:120]}", flush=True)
@@ -1551,7 +1765,16 @@ def health() -> Dict[str, Any]:
             "maxBudget": float(config.AI_FILL_MAX_BUDGET), "quality": q,
             "chains": {name: {"pictures": [list(x) for x in image_models(name)],
                               "clips": [list(x) for x in video_models(name)]} for name in QUALITIES},
-            "upscale": bool(getattr(config, "AI_FILL_UPSCALE", True))}
+            "upscale": bool(getattr(config, "AI_FILL_UPSCALE", True)),
+            # Avatarity (src/avatarity.py): the plan provider asked first when its key is set (no call made here).
+            "avatarity": {"key": avatarity_key(), "provider": config.AI_PROVIDER,
+                          "image": config.AVATARITY_IMAGE_MODEL, "video": config.AVATARITY_VIDEO_MODEL,
+                          "resolution": config.AVATARITY_RESOLUTION}}
+
+
+def avatarity_key() -> bool:
+    from . import avatarity
+    return avatarity.configured()
 
 
 def report(doc: Optional[dict] = None) -> Dict[str, Any]:
@@ -1575,6 +1798,7 @@ def report(doc: Optional[dict] = None) -> Dict[str, Any]:
                        **({"sharpened": dict(_STATE["sharpened"])} if _STATE.get("sharpened") else {})},
             "passes": list(_STATE.get("passes") or []),
             "disclosure": DISCLOSURE,
+            **({"bible": dict(_STATE["bible"])} if _STATE.get("bible") else {}),
         }
         if _STATE.get("prior_images") or _STATE.get("prior_clips"):
             rep["before"] = {"images": int(_STATE.get("prior_images", 0)), "clips": int(_STATE.get("prior_clips", 0)),
@@ -1622,13 +1846,43 @@ def label_scenes(doc: dict) -> int:
     return added
 
 
+def usage() -> Dict[str, Any]:
+    """What this job took from the Avatarity plan and what the plan has left (one /usage call; {} without a key)."""
+    from . import avatarity
+    c = avatarity.client()
+    if c is None:
+        return {}
+    led = avatarity.ledger()
+    out: Dict[str, Any] = {"videoUnits": int(led.get("videoUnits", 0)), "images": int(led.get("images", 0)),
+                           "clips": int(led.get("clips", 0)), "failed": int(led.get("failed", 0))}
+    try:
+        u = c.usage()
+        out.update(remainingVeo=u["veo"].get("remaining"), remainingImages=u["images"].get("remaining"),
+                   grantedVeo=u["veo"].get("granted"), grantedImages=u["images"].get("granted"))
+    except Exception as e:  # noqa: BLE001 - the counts stand without the plan's own numbers
+        out["usageError"] = str(e)[:120]
+        out.update(remainingVeo=c.remaining.get("veo"), remainingImages=c.remaining.get("images"))
+    return out
+
+
 def annotate(doc: dict) -> None:
     """doc.meta.aiFill and, once anything was made, the YouTube disclosure line first in meta.warnings."""
     if not enabled() or not isinstance(doc, dict):
         return
     meta = doc.setdefault("meta", {})
+    if (_STATE.get("block") or {}).get("full"):
+        # The whole video is AI (src/aivisuals.py): its own report and disclosure, no per-scene "AI" tag.
+        from . import aivisuals
+        rep = report(doc)
+        rep["usage"] = {"avatarity": usage(), "openrouterUsd": round(float(rep.get("spentUsd") or 0.0), 4)}
+        rep["fallbacks"] = list(_STATE.get("fallbacks") or [])
+        aivisuals.annotate(doc, rep, dict(_STATE.get("block") or {}))
+        return
     labelled = label_scenes(doc)
     rep = report(doc)
+    rep["usage"] = {"avatarity": usage(), "openrouterUsd": round(float(rep.get("spentUsd") or 0.0), 4)}
+    if _STATE.get("fallbacks"):
+        rep["fallbacks"] = list(_STATE["fallbacks"])
     if labelled:
         rep["labelled"] = labelled
     meta["aiFill"] = rep
