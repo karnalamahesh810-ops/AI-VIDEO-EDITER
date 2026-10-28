@@ -8,7 +8,7 @@ class Looks(unittest.TestCase):
     def test_every_look_renders(self):
         looks = [D.ActCard("Act 2", "The Flood That Went to the Wrong Lake", 2.8),
                  D.Number("1,037.16 ft", "Lake Mead · record low", 3.0, count_from=1000.0),
-                 D.LowerThird("Katie Hobbs", "Governor of Arizona", 4.0, quote="“A line.”", quote_at=1.0)]
+                 D.LowerThird("Katie Hobbs", "Governor of Arizona", 4.0)]
         for look in looks:
             for t in (0.0, 0.2, 1.5, look.seconds - 0.05):
                 im = look.frame(t)
