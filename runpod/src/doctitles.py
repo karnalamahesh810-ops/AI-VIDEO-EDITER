@@ -106,38 +106,80 @@ def soft_shade(box: Tuple[int, int, int, int], strength: float, blur: int = 90) 
 # ------------------------------------------------------------------ act card
 @dataclass
 class ActCard:
-    label: str                       # "ACT 1"
+    """v2 (the owner, 2026-10-28: bolder, clearer): the shot eases ~35 % darker with a slight blur, the gold rule
+    draws out from the centre (300 ms), the label fades in, the title reveals line by line with a mask wipe and a
+    104 -> 100 % scale settle (450 ms ease-out), holds, then everything fades in 250 ms. Pass the shot's frame as
+    `bg` (the darken and blur are of the picture itself); without it only the text layer is returned."""
+    label: str                       # "ACT 2"
     title: str                       # "The Flood That Went to the Wrong Lake"
     seconds: float = 2.8
-    dim: float = 0.42
+    dim: float = 0.35
 
-    def frame(self, t: float) -> Image.Image:
-        out_a = fade_out(t, self.seconds, 0.3)
-        a_in = ease(t / 0.4)
-        a = a_in * out_a
-        img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-        # The shot darkened ~35 % with a soft vignette (darker at the edges).
-        dim = Image.new("RGBA", (W, H), (0, 0, 0, int(255 * self.dim * a)))
-        img = Image.alpha_composite(img, dim)
-        img = Image.alpha_composite(img, _scale_alpha(_vignette(), a))
+    def lines(self) -> List[str]:
+        f = serif(92, 800)
+        if text_width(self.title, f) <= W - 2 * SAFE_X - 120:
+            return [self.title]
+        words = self.title.split()
+        best, cut = 1e9, 1
+        for k in range(1, len(words)):
+            a, b = " ".join(words[:k]), " ".join(words[k:])
+            d = abs(text_width(a, f) - text_width(b, f))
+            if d < best:
+                best, cut = d, k
+        return [" ".join(words[:cut]), " ".join(words[cut:])]
+
+    def frame(self, t: float, bg: Optional[Image.Image] = None) -> Image.Image:
+        out_a = fade_out(t, self.seconds, 0.25)
+        k_bg = ease(t / 0.4) * out_a
+        if bg is not None:
+            base = bg.convert("RGB")
+            if k_bg > 0:
+                soft = base.filter(ImageFilter.GaussianBlur(5)).point(lambda v: int(v * (1 - self.dim)))
+                base = Image.blend(base, soft, k_bg)
+            img = base.convert("RGBA")
+            img = Image.alpha_composite(img, _scale_alpha(_vignette(), k_bg * 0.8))
+        else:
+            img = Image.new("RGBA", (W, H), (0, 0, 0, int(255 * self.dim * k_bg)))
         txt = Image.new("RGBA", (W, H), (0, 0, 0, 0))
         d = ImageDraw.Draw(txt)
-        lf = sans(30, 600)
-        track_l = 30 * 0.12 + 10 * (1 - ease(t / 0.45))
-        lw = text_width(self.label.upper(), lf, track_l)
-        cy = H // 2
-        d_label_y = cy - 92
-        draw_tracked(d, ((W - lw) / 2, d_label_y), self.label.upper(), lf, GOLD + (int(255 * a),), track_l)
-        # Thin gold rule: wipes out from the centre.
-        rw = int(72 * ease((t - 0.05) / 0.4))
-        if rw > 0:
-            d.rectangle([W // 2 - rw // 2, cy - 44, W // 2 + rw // 2, cy - 43], fill=GOLD + (int(255 * a),))
-        tf = serif(72 if len(self.title) <= 34 else 62, 600)
-        track_t = 6 * (1 - ease(t / 0.4))
-        tw = text_width(self.title, tf, track_t)
-        dy = int(14 * (1 - a_in))
-        draw_tracked(d, ((W - tw) / 2, cy - 22 + dy), self.title, tf, WHITE + (int(255 * a),), track_t)
-        return Image.alpha_composite(img, with_shadow(txt, 0.6, 8))
+        lines = self.lines()
+        tf = serif(92, 800)
+        lh = 104
+        block_h = 36 + 26 + lh * len(lines)
+        top = (H - block_h) // 2 - 10
+        # Label: ExtraBold tracked caps in a brighter gold.
+        lf = sans(36, 800)
+        a_lab = ease((t - 0.05) / 0.35) * out_a
+        track = 36 * 0.16
+        lw = text_width(self.label.upper(), lf, track)
+        draw_tracked(d, ((W - lw) / 2, top), self.label.upper(), lf, GOLD2 + (int(255 * a_lab),), track)
+        # The rule draws out from the centre: 3 px, 140 px wide, in 300 ms.
+        rw = int(140 * ease((t - 0.05) / 0.3))
+        ry = top + 36 + 14
+        if rw > 1:
+            d.rectangle([W // 2 - rw // 2, ry, W // 2 + rw // 2, ry + 2], fill=GOLD2 + (int(255 * out_a),))
+        layer = with_shadow(txt, 0.75, 10)
+        # Title lines: mask wipe left -> right + scale 104 -> 100 %, 450 ms ease-out, the second line 120 ms later.
+        for i, line in enumerate(lines):
+            p = ease((t - 0.15 - 0.12 * i) / 0.45)
+            if p <= 0:
+                continue
+            tw = int(text_width(line, tf)) + 8
+            tl = Image.new("RGBA", (tw + 40, lh + 40), (0, 0, 0, 0))
+            ImageDraw.Draw(tl).text((20, 10), line, font=tf, fill=WHITE + (255,))
+            tl = with_shadow(tl, 0.8, 10)
+            mask = Image.new("L", tl.size, 0)
+            ImageDraw.Draw(mask).rectangle([0, 0, int(tl.size[0] * p), tl.size[1]], fill=255)
+            mask = mask.filter(ImageFilter.GaussianBlur(6))
+            tl.putalpha(ImageChops.multiply(tl.split()[3], mask).point(lambda v: int(v * out_a)))
+            s = 1.04 - 0.04 * p
+            tl = tl.resize((int(tl.size[0] * s), int(tl.size[1] * s)), Image.LANCZOS)
+            y = top + 36 + 34 + i * lh - int((s - 1) * lh / 2)
+            layer.alpha_composite(tl, (int((W - tl.size[0]) / 2), int(y)))
+        return Image.alpha_composite(img, layer)
+
+
+GOLD2 = (233, 190, 72)               # v2: a brighter gold
 
 
 def _scale_alpha(im: Image.Image, k: float) -> Image.Image:
@@ -182,72 +224,72 @@ def _number_of(target: str) -> Optional[float]:
     return float(m.group(0).replace(",", "")) if m else None
 
 
+def _legible(txt: Image.Image, top: int, a: float) -> Image.Image:
+    """v2 contrast: a soft dark gradient rising from the bottom-left behind the text area (never a box) and a
+    stronger, wider shadow - readable over a bright sky."""
+    shade = soft_shade((-420, top - 230, 1250, H + 330), 1.25 * a, blur=110)
+    out = Image.alpha_composite(shade, with_shadow(txt, 0.55, 18))
+    return Image.alpha_composite(out, with_shadow(txt, 0.85, 6))
+
+
 @dataclass
 class Number:
+    """v2: ExtraBold 124 px figure, Bold 31 px caption (3-5 words) at 85 % white; a 600 ms count-up with the gold
+    rule drawing in at the same time; 350 ms slide-up + fade in, 250 ms fade out."""
     value: str                      # "1,037.16 ft", "−40%"
-    caption: str                    # "Lake Mead · record low, Oct 22"
+    caption: str                    # "Lake Mead record low"
     seconds: float = 3.0
     count_from: Optional[float] = None   # None: no count-up
 
-    def frame(self, t: float) -> Image.Image:
+    def frame(self, t: float, bg: Optional[Image.Image] = None) -> Image.Image:
         out_a = fade_out(t, self.seconds, 0.25)
         a1 = ease(t / 0.35) * out_a
-        a2 = ease((t - 0.12) / 0.35) * out_a
-        size = 96 if len(self.value) <= 12 else 72
-        nf, cf = sans(size, 700), sans(28, 500)
+        a2 = ease((t - 0.1) / 0.35) * out_a
+        size = 124 if len(self.value) <= 12 else 100
+        nf, cf = sans(size, 800), sans(31, 700)
         val = self.value
         target = _number_of(self.value)
         if self.count_from is not None and target is not None and t < 0.6:
             val = _format_like(self.value, self.count_from + (target - self.count_from) * ease(t / 0.6))
         txt = Image.new("RGBA", (W, H), (0, 0, 0, 0))
         d = ImageDraw.Draw(txt)
-        cap_y = BLOCK_BOTTOM - 34
-        num_y = cap_y - 10 - int(size * 1.12)
-        dy1, dy2 = int(22 * (1 - ease(t / 0.35))), int(22 * (1 - ease((t - 0.12) / 0.35)))
-        d.text((BLOCK_X - 2, num_y + dy1), val, font=nf, fill=WHITE + (int(255 * a1),))
-        d.text((BLOCK_X, cap_y + dy2), self.caption, font=cf, fill=WHITE + (int(235 * a2),))
-        gw = int(48 * ease(t / 0.4))
+        cap_y = BLOCK_BOTTOM - 36
+        num_y = cap_y - 6 - int(size * 1.12)
+        dy1, dy2 = int(24 * (1 - ease(t / 0.35))), int(24 * (1 - ease((t - 0.1) / 0.35)))
+        d.text((BLOCK_X - 3, num_y + dy1), val, font=nf, fill=WHITE + (int(255 * a1),))
+        d.text((BLOCK_X, cap_y + dy2), self.caption, font=cf, fill=WHITE + (int(217 * a2),))
+        gw = int(88 * ease(t / 0.6))
         if gw:
-            gy = num_y + int(size * 0.24) - 14 + dy1
-            d.rectangle([BLOCK_X, gy, BLOCK_X + gw, gy + 2], fill=GOLD + (int(255 * a1),))
-        shade = soft_shade((-300, num_y - 160, 1100, H + 260), 0.9 * a1)
-        return Image.alpha_composite(shade, with_shadow(txt))
+            gy = num_y + int(size * 0.22) - 16 + dy1
+            d.rectangle([BLOCK_X, gy, BLOCK_X + gw, gy + 2], fill=GOLD2 + (int(255 * out_a),))
+        layer = _legible(txt, num_y, a1)
+        return Image.alpha_composite(bg.convert("RGBA"), layer) if bg is not None else layer
 
 
 @dataclass
 class LowerThird:
+    """v2: name Bold 52 px, role Bold 30 px tracked caps; a 350 ms slide-in + fade; name and role only."""
     name: str
     role: str
     seconds: float = 4.0
-    quote: str = ""
-    quote_at: float = 0.0           # seconds after the start when the quote is spoken
 
-    def frame(self, t: float) -> Image.Image:
+    def frame(self, t: float, bg: Optional[Image.Image] = None) -> Image.Image:
         out_a = fade_out(t, self.seconds, 0.25)
         a1 = ease(t / 0.35) * out_a
-        a2 = ease((t - 0.12) / 0.35) * out_a
+        a2 = ease((t - 0.1) / 0.35) * out_a
         txt = Image.new("RGBA", (W, H), (0, 0, 0, 0))
         d = ImageDraw.Draw(txt)
-        nf, rf = sans(40, 700), sans(26, 600)
-        role_y = BLOCK_BOTTOM - 30
-        name_y = role_y - 8 - 50
-        dy1, dy2 = int(18 * (1 - ease(t / 0.35))), int(18 * (1 - ease((t - 0.12) / 0.35)))
-        d.text((BLOCK_X, name_y + dy1), self.name, font=nf, fill=WHITE + (int(255 * a1),))
-        draw_tracked(d, (BLOCK_X + 1, role_y + dy2), self.role.upper(), rf, (235, 235, 235, int(235 * a2)),
-                     26 * 0.12)
-        gw = int(48 * ease(t / 0.4))
+        nf, rf = sans(52, 700), sans(30, 700)
+        role_y = BLOCK_BOTTOM - 34
+        name_y = role_y - 10 - 62
+        dx1, dx2 = int(-36 * (1 - ease(t / 0.35))), int(-36 * (1 - ease((t - 0.1) / 0.35)))
+        d.text((BLOCK_X + dx1, name_y), self.name, font=nf, fill=WHITE + (int(255 * a1),))
+        draw_tracked(d, (BLOCK_X + 2 + dx2, role_y), self.role.upper(), rf, (255, 255, 255, int(222 * a2)), 30 * 0.12)
+        gw = int(88 * ease(t / 0.4))
         if gw:
-            d.rectangle([BLOCK_X, name_y - 14 + dy1, BLOCK_X + gw, name_y - 12 + dy1], fill=GOLD + (int(255 * a1),))
-        top = name_y
-        if self.quote and t > self.quote_at:
-            tq = t - self.quote_at
-            aq = ease(tq / 0.35) * out_a
-            qf = serif(40, 500)
-            qy = name_y - 36 - 56 + int(14 * (1 - ease(tq / 0.35)))
-            d.text((BLOCK_X - 2, qy), self.quote, font=qf, fill=WHITE + (int(255 * aq),))
-            top = qy
-        shade = soft_shade((-300, top - 170, 1150, H + 260), 0.9 * a1)
-        return Image.alpha_composite(shade, with_shadow(txt))
+            d.rectangle([BLOCK_X + dx1, name_y - 16, BLOCK_X + dx1 + gw, name_y - 14], fill=GOLD2 + (int(255 * a1),))
+        layer = _legible(txt, name_y, a1)
+        return Image.alpha_composite(bg.convert("RGBA"), layer) if bg is not None else layer
 
 
 # ------------------------------------------------------------------ maps (real geography)
@@ -446,8 +488,13 @@ class MapScene:
             import numpy as np
             h = np.asarray(hill, dtype=np.float32) / 255.0
             e = np.asarray(self._elev, dtype=np.float32) / 255.0
-            light = 0.30 + 0.70 * h
-            rgb = np.stack([(78 + 40 * e) * light, (64 + 34 * e) * light, (52 + 26 * e) * light], axis=-1)
+            # v2: a satellite-style colour relief - warm low desert, red-brown plateaus, grey-green high
+            # forest, pale peaks - lit by the hillshade (deep shadows, bright sun-facing slopes).
+            light = 0.22 + 0.95 * h ** 1.1
+            stops = np.array([0.0, 0.18, 0.36, 0.55, 0.75, 1.0])
+            cols = np.array([[176, 146, 104], [168, 122, 84], [150, 98, 70], [118, 112, 84], [96, 104, 84],
+                             [205, 205, 200]], dtype=np.float32)
+            rgb = np.stack([np.interp(e, stops, cols[:, c]) for c in range(3)], axis=-1) * light[..., None] * 0.92
             land_img = Image.fromarray(np.clip(rgb, 0, 255).astype(np.uint8))
             img.paste(land_img, (0, 0), ImageChops.invert(self._sea))
             d = ImageDraw.Draw(img, "RGBA")
@@ -474,7 +521,10 @@ class MapScene:
         self._base = img
         return img
 
-    def frame(self, t: float) -> Image.Image:
+    def frame(self, t: float, bg: Optional[Image.Image] = None) -> Image.Image:
+        """v2: a slight 3D tilt, a slow push, lakes filling with colour, the river drawing on with a soft glow and a
+        few slow flow particles, dam dots pulsing once, bold labels with a dark halo (3-4 a map)."""
+        import numpy as np
         base = self.base().copy().convert("RGBA")
         S = self.S
         over = Image.new("RGBA", base.size, (0, 0, 0, 0))
@@ -485,17 +535,18 @@ class MapScene:
                 continue
             for f in states([code]):
                 for r in f["rings"]:
-                    d.polygon([self.px(*p) for p in r], fill=rgb + (int(70 * a),))
-                    d.line([self.px(*p) for p in r] + [self.px(*r[0])], fill=rgb + (int(200 * a),), width=3)
+                    d.polygon([self.px(*p) for p in r], fill=rgb + (int(62 * a),))
+                    d.line([self.px(*p) for p in r] + [self.px(*r[0])], fill=rgb + (int(220 * a),), width=4)
         base = Image.alpha_composite(base, over)
         lk = Image.new("RGBA", base.size, (0, 0, 0, 0))
         dk = ImageDraw.Draw(lk)
         for name, at in self.lakes.items():
-            a = ease((t - at) / 0.45)
+            a = ease((t - at) / 0.6)                       # the lake fills in with colour
+            if a <= 0:
+                continue
             for r in lake_rings(name):
-                dk.polygon([self.px(*p) for p in r], fill=(70, 160, 196, int(120 + 135 * a)))
-        glow = lk.filter(ImageFilter.GaussianBlur(10))
-        base = Image.alpha_composite(base, glow)
+                dk.polygon([self.px(*p) for p in r], fill=(46, 150, 205, int(255 * a)))
+        base = Image.alpha_composite(base, _scale_alpha(lk.filter(ImageFilter.GaussianBlur(14)), 0.9))
         base = Image.alpha_composite(base, lk)
         if self.river:
             rid, t0, t1, frm, to = self.river
@@ -505,57 +556,114 @@ class MapScene:
                 i0 = automaps.nearest_vertex([list(p) for p in pts], frm)[0]
                 i1 = automaps.nearest_vertex([list(p) for p in pts], to)[0]
                 pts = pts[min(i0, i1):max(i0, i1) + 1]
+                if i0 > i1:
+                    pts = pts[::-1]                       # draw from `from` to `to`
             k = ease((t - t0) / max(0.1, t1 - t0))
             if k > 0 and len(pts) > 1:
-                n = max(2, int(len(pts) * k))
+                xy = [self.px(*p) for p in pts]
+                seg = np.hypot(np.diff([p[0] for p in xy]), np.diff([p[1] for p in xy]))
+                cum = np.concatenate([[0.0], np.cumsum(seg)])
+                total = float(cum[-1]) or 1.0
+                upto = total * k
+                n = int(np.searchsorted(cum, upto))
+                drawn = xy[:max(2, n)]
                 rl = Image.new("RGBA", base.size, (0, 0, 0, 0))
-                ImageDraw.Draw(rl).line([self.px(*p) for p in pts[:n]], fill=(140, 214, 255, 255), width=5 * S // 2,
-                                        joint="curve")
-                base = Image.alpha_composite(base, rl.filter(ImageFilter.GaussianBlur(5)))
+                ImageDraw.Draw(rl).line(drawn, fill=(150, 220, 255, 255), width=6, joint="curve")
+                base = Image.alpha_composite(base, _scale_alpha(rl.filter(ImageFilter.GaussianBlur(9)), 0.95))
                 base = Image.alpha_composite(base, rl)
-        # The slow push (crop of the 2x canvas), then labels at output scale (crisp).
+                # Flow particles: a few soft dots drifting slowly along the drawn river.
+                pl = Image.new("RGBA", base.size, (0, 0, 0, 0))
+                dp = ImageDraw.Draw(pl)
+                for j in range(7):
+                    pos = ((j / 7.0) + 0.06 * max(0.0, t - t0)) % 1.0 * upto
+                    q = int(np.searchsorted(cum, pos))
+                    if 0 < q < len(xy):
+                        f = (pos - cum[q - 1]) / max(1e-6, cum[q] - cum[q - 1])
+                        x = xy[q - 1][0] + (xy[q][0] - xy[q - 1][0]) * f
+                        y = xy[q - 1][1] + (xy[q][1] - xy[q - 1][1]) * f
+                        dp.ellipse([x - 7, y - 7, x + 7, y + 7], fill=(235, 250, 255, 230))
+                base = Image.alpha_composite(base, pl.filter(ImageFilter.GaussianBlur(3)))
+        # The slow push (crop of the 2x canvas).
         z = 1.0 + self.push * ease(t / max(0.1, self.seconds))
         fx, fy = self.px(*self.focus) if self.focus else (W * S / 2, H * S / 2)
         cw, ch = W * S / z, H * S / z
         x0 = min(max(0, fx - cw / 2), W * S - cw)
         y0 = min(max(0, fy - ch / 2), H * S - ch)
-        frame = base.crop((int(x0), int(y0), int(x0 + cw), int(y0 + ch))).resize((W, H), Image.LANCZOS)
+        flat = base.crop((int(x0), int(y0), int(x0 + cw), int(y0 + ch))).resize((W, H), Image.LANCZOS)
+        # A slight 3D tilt: the bottom comes closer (the plane leans back), no empty corners.
+        k = TILT
+        src = [(0, 0), (W, 0), (W - k * W, H), (k * W, H)]
+        dst = [(0, 0), (W, 0), (W, H), (0, H)]
+        frame = flat.transform((W, H), Image.PERSPECTIVE, _persp(dst, src), Image.BICUBIC)
+        fwd = _homography(src, dst)
+
+        def place(lon, lat):
+            X, Y = self.px(lon, lat)
+            X, Y = (X - x0) * W / cw, (Y - y0) * H / ch
+            v = fwd @ np.array([X, Y, 1.0])
+            return v[0] / v[2], v[1] / v[2]
+
         out_a = fade_out(t, self.seconds, 0.3)
+        frame = Image.alpha_composite(frame, _scale_alpha(_vignette(), 0.9))
         txt = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        dots = Image.new("RGBA", (W, H), (0, 0, 0, 0))
         d2 = ImageDraw.Draw(txt)
+        dd = ImageDraw.Draw(dots)
         for lab in self.labels:
             a = ease((t - lab.at) / 0.35) * out_a
             if a <= 0:
                 continue
-            X, Y = self.px(lab.lon, lab.lat)
-            X, Y = (X - x0) * W / cw, (Y - y0) * H / ch
+            X, Y = place(lab.lon, lab.lat)
             dy = int(10 * (1 - ease((t - lab.at) / 0.35)))
             if lab.kind == "state":
-                f = sans(24, 700)
-                tw = text_width(lab.text.upper(), f, 24 * 0.14)
-                draw_tracked(d2, (X - tw / 2, Y - 12 + dy), lab.text.upper(), f, (255, 255, 255, int(200 * a)),
-                             24 * 0.14)
+                f = sans(28, 800)
+                tw = text_width(lab.text.upper(), f, 28 * 0.16)
+                draw_tracked(d2, (X - tw / 2, Y - 14 + dy), lab.text.upper(), f, (255, 255, 255, int(225 * a)),
+                             28 * 0.16)
                 continue
             if lab.kind == "pin":
-                r = 7
-                d2.ellipse([X - r - 3, Y - r - 3, X + r + 3, Y + r + 3], fill=(255, 255, 255, int(235 * a)))
-                d2.ellipse([X - r, Y - r, X + r, Y + r], fill=GOLD + (int(255 * a),))
-            f = sans(30, 700)
+                tp = t - lab.at                              # one pulse: a ring grows and fades
+                if 0 < tp < 0.9:
+                    rr = 9 + 34 * ease(tp / 0.9)
+                    dd.ellipse([X - rr, Y - rr, X + rr, Y + rr], outline=GOLD2 + (int(230 * (1 - tp / 0.9)),),
+                               width=3)
+                r = 9
+                dd.ellipse([X - r - 3, Y - r - 3, X + r + 3, Y + r + 3], fill=(255, 255, 255, int(240 * a)))
+                dd.ellipse([X - r, Y - r, X + r, Y + r], fill=GOLD2 + (int(255 * a),))
+            f = sans(37, 700)
             tw = text_width(lab.text, f)
             tx, ty = (X + lab.dx if lab.dx >= 0 else X + lab.dx - tw), Y + lab.dy
             if abs(lab.dx) > 40 or abs(lab.dy) > 40:
-                # A leader: the label stands in clear space, a thin line back to its place (never over the water).
                 ax = tx if lab.dx > 0 else tx + tw
-                ay = ty + 4
-                d2.line([(X + (6 if lab.dx > 0 else -6), Y + (6 if lab.dy > 0 else -6)), (ax, ay)],
-                        fill=(255, 255, 255, int(200 * a)), width=2)
-                d2.text((tx, ty - 34 + dy if lab.dy < 0 else ty - 2 + dy), lab.text, font=f,
-                        fill=(255, 255, 255, int(255 * a)))
+                d2.line([(X + (8 if lab.dx > 0 else -8), Y + (8 if lab.dy > 0 else -8)), (ax, ty + 4)],
+                        fill=(255, 255, 255, int(220 * a)), width=3)
+                ty = ty - 42 if lab.dy < 0 else ty
             else:
-                d2.text((tx, ty - 22 + dy), lab.text, font=f, fill=(255, 255, 255, int(255 * a)))
-        frame = Image.alpha_composite(frame, _scale_alpha(_vignette(), 0.85))     # the eye goes to the middle
-        frame = Image.alpha_composite(frame, with_shadow(txt, 0.75, 5))
-        # In / out: a short dissolve from and to the shot (the map is opaque in between).
+                ty = ty - 24
+            d2.text((tx, ty + dy), lab.text, font=f, fill=(255, 255, 255, int(255 * a)),
+                     stroke_width=2, stroke_fill=(10, 14, 18, int(150 * a)))
+        frame = Image.alpha_composite(frame, dots)
+        frame = Image.alpha_composite(frame, with_shadow(txt, 0.95, 7))
         a_in = ease(t / 0.35)
         frame.putalpha(int(255 * min(a_in, out_a)))
-        return frame
+        return Image.alpha_composite(bg.convert("RGBA"), frame) if bg is not None else frame
+
+
+TILT = 0.055
+
+
+def _homography(src, dst):
+    """3x3 matrix mapping src points to dst points (4 pairs)."""
+    import numpy as np
+    A = []
+    for (x, y), (u, v) in zip(src, dst):
+        A += [[x, y, 1, 0, 0, 0, -u * x, -u * y], [0, 0, 0, x, y, 1, -v * x, -v * y]]
+    b = [c for p in dst for c in p]
+    h = np.linalg.solve(np.array(A, dtype=float), np.array(b, dtype=float))
+    return np.append(h, 1.0).reshape(3, 3)
+
+
+def _persp(out_pts, in_pts):
+    """PIL PERSPECTIVE coefficients: for each output pixel, where to read the input."""
+    m = _homography(out_pts, in_pts)
+    return tuple((m / m[2, 2]).flatten()[:8])
