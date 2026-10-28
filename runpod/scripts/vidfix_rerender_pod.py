@@ -146,6 +146,10 @@ def after(doc: dict) -> dict:
             o["zone"] = "upper-left"
     report["lookEnds"] = editing.end_at_cuts(doc)
     report["aiLabels"] = aifill.label_scenes(doc)
+    # round 3: news_compilation is clean cut by default - names and place maps only, straight cuts
+    if os.environ.get("CLEAN_CUT", "1") != "0":
+        from src import cleancut  # noqa: E402
+        report["cleanCut"] = cleancut.apply(doc)
     doc["meta"]["vidfix"] = report
     return doc
 
