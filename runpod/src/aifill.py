@@ -956,7 +956,8 @@ def _lines(doc: dict, only: Optional[Sequence[dict]], story: dict, why: str) -> 
             skip("a flash under 0.6 s")
             continue
         job = gapfill.job_for(s, i, fps, known)
-        if str(job.get("subject_type") or "") == "document":
+        if str(job.get("subject_type") or "") == "document" and not (_STATE.get("block") or {}).get("full"):
+            # (The whole-video AI mode pictures it too: the no-text rule keeps any paper blank or out of focus.)
             skip("a document line (never a made-up record)")
             continue
         if news_event_line(job, str(s.get("text") or ""), story):

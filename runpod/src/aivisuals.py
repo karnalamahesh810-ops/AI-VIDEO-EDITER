@@ -81,6 +81,7 @@ def prepare_input(inp: dict) -> Dict[str, Any]:
     cfg.setdefault("AI_FILL_LABEL", False)          # the whole video is AI: one disclosure, no per-scene tag
     cfg.setdefault("AI_FILL_NEWS_EVENTS", True)     # every line needs a picture (a generic one, never a fake chyron)
     cfg.setdefault("IMAGE_MAX_PER_VIDEO", 0)        # the old generated-image path stays off: AI fill makes them all
+    cfg.setdefault("NO_EMPTY_RESCUE", False)        # no web search before a text card: every line is AI
     inp["config"] = cfg
     # Every line: pictures for all, clips for clip_pct of the time. Caps: the plan allowance's (units, images);
     # the dollar budget covers only OpenRouter (prompts, checks, fallbacks).
@@ -102,6 +103,21 @@ def prepare_input(inp: dict) -> Dict[str, Any]:
         inp["ai_fill"]["image_models"] = [[s.get("or_image_model") or "google/gemini-nano-banana-2.1", "2K"]]
         inp["ai_fill"]["video_models"] = [[s.get("or_video_model") or "google/veo-3.1-lite", "720p"]]
     return s
+
+
+def clear_graphics(doc: dict) -> int:
+    """The planner's full-screen data looks (an animation-only scene) become empty lines for the AI pass: the owner
+    turned the in-house looks down (2026-10-28) and the whole-video mode is clean pictures. (The Autopilot session's
+    clean_cut flag takes over the overlays once merged.) Returns how many."""
+    n = 0
+    for sc in doc.get("scenes") or []:
+        m = sc.get("media")
+        if sc.get("visualType") == "animation" and (not isinstance(m, dict) or m.get("type") == "animation"):
+            sc["media"] = None
+            sc.pop("animation", None)
+            sc["visualType"] = "footage"
+            n += 1
+    return n
 
 
 def annotate(doc: dict, rep: Dict[str, Any], block: Dict[str, Any]) -> None:

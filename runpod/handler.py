@@ -1777,6 +1777,8 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         # the search, the pools, the rescue and the ladder have all had their turn - gets an AI picture (a few key
         # ones an AI clip) before any hold, borrowed picture or text card below. Without the block nothing runs.
         aifill.set_story(brief)
+        if ai_only:
+            aivisuals.clear_graphics(doc)
         report("Making the AI clips and pictures" if ai_only else "Making AI pictures for the lines with no footage")
         try:
             aifill.fill_doc(doc, work=work, story=brief, label="whole video (AI visuals)" if ai_only
@@ -3288,7 +3290,7 @@ CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "GAMEPLAY_FOOTAGE", "JUDGE_BEST_OF", "EX
                       "STILLS_TO_CLIPS_MAX_RUN", "VISION_NEWS_CREATOR_MARKS", "SLIP_CHECKS", "AI_FILL_NEWS_EVENTS",
                       "AI_FILL_LABEL", "LOOKS_END_AT_CUTS", "DATES_ONE_PLACE",
                       # The whole-video AI mode (src/aivisuals.py) sets these per job.
-                      "AI_FILL_SECONDS", "AI_FILL_PARALLEL", "AI_FILL_CLIP_PARALLEL")
+                      "AI_FILL_SECONDS", "AI_FILL_PARALLEL", "AI_FILL_CLIP_PARALLEL", "NO_EMPTY_RESCUE")
 
 
 def _apply_config(overrides) -> dict:
