@@ -118,7 +118,14 @@ class Punches(unittest.TestCase):
             word = next(w for w in s["words"] if w["text"] == p["word"])
             self.assertAlmostEqual(s["startFrame"] / 30 + p["at"], word["start"] - editing.PUNCH_LEAD, delta=0.01)
             self.assertIn(editing._norm(p["word"]), {"forty", "largest", "million"})
-        # a soft sound under each, under the owner's level
+        # silent by default since 2026-10-28 (EDIT_V3_PUNCH_SOUND off: the owner dislikes our whooshes) ...
+        self.assertFalse([r for r in doc["sfx"] if r["kind"] == "punch"])
+        # ... and with the sound switched on, a soft one under each, under the owner's level
+        doc = _doc([_scene(0, 0, 7, "Back then the lake held forty million acre feet of water."),
+                    _scene(1, 7, 7, "It was the largest reservoir in the country by far."),
+                    _scene(2, 14, 7, "Engineers came from everywhere to see it work.")])
+        editing.apply(doc, {"editing_v3": True, "config": {"EDIT_V3_SPLIT_HOLDS": False, "EDIT_V3_HOOK_PACE": False,
+                                                           "EDIT_V3_PUNCH_SOUND": True}})
         rows = [r for r in doc["sfx"] if r["kind"] == "punch"]
         self.assertTrue(rows)
         self.assertTrue(all(0 < r["volume"] <= 1 for r in rows))

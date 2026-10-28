@@ -2383,7 +2383,8 @@ EDIT_V3_PUNCHES = _flag("EDIT_V3_PUNCHES", True)
 # No stretch over 30 s with nothing new: the best word in it gets a punch.
 EDIT_V3_INTERRUPTS = _flag("EDIT_V3_INTERRUPTS", True)
 # A soft whoosh under each punch, levelled against the voice (the SFX master scales it).
-EDIT_V3_PUNCH_SOUND = _flag("EDIT_V3_PUNCH_SOUND", True)
+# Off since 2026-10-28 (the owner dislikes our sounds and pops; a punch, where a style keeps it, is silent).
+EDIT_V3_PUNCH_SOUND = _flag("EDIT_V3_PUNCH_SOUND", False)
 # A graphic over a full-screen graphic scene, and a caption repeating one from the last 4 minutes, are dropped.
 EDIT_V3_HYGIENE = _flag("EDIT_V3_HYGIENE", True)
 # No colour-shift / light leak / flicker / dust on a clip unless the scene is treated as film, vintage or archival.
@@ -2391,3 +2392,11 @@ EDIT_V3_CLEAN_EFFECTS = _flag("EDIT_V3_CLEAN_EFFECTS", True)
 # A kinetic number, date or word ends at the next real cut when it has had 2.5 s by then (editing.end_at_cuts,
 # 2026-10-26: 44 of the Hoover Dam video's ~60 looks ran on over a cut).
 LOOKS_END_AT_CUTS = _flag("LOOKS_END_AT_CUTS", True)
+# Clean cut (src/cleancut.py, the owner 2026-10-28: our text pops, number / data looks and motion cards are
+# "literally bad"): footage with straight cuts, a short crossfade now and then, gentle movement on stills, none of
+# our graphics or their sounds - only lower-third names (CLEAN_CUT_NAMES) and maps where the line names a place
+# (CLEAN_CUT_MAPS), and the source / AI tags. news_compilation's default (src/styles.py); any job may set
+# "clean_cut": true / false.
+CLEAN_CUT = _flag("CLEAN_CUT", False)
+CLEAN_CUT_NAMES = _flag("CLEAN_CUT_NAMES", True)
+CLEAN_CUT_MAPS = _flag("CLEAN_CUT_MAPS", True)

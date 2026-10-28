@@ -95,7 +95,7 @@ from src import (config, costs, director, events, fanout, geocode, library, medi
                  render as renderer, selftest, storage, timeline, transcribe, vision)
 from src import intent as scene_intent_mod
 from src import templates
-from src import ledger, localvision, marks, r2, reframe, stillframe, styles, upscale
+from src import cleancut, ledger, localvision, marks, r2, reframe, stillframe, styles, upscale
 from src import ambience, gapfill, grade, packs, quality, review, shotcap, voicepolish
 from src import brandkit, clipfx, stockblock
 from src import recut, reclip, relook, restore
@@ -1926,6 +1926,10 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         hy.finish(doc)
     # AI fill's report (meta.aiFill) and, once it made anything, its YouTube disclosure line (src/aifill.py).
     aifill.annotate(doc)
+    if cleancut.enabled():
+        # Clean cut (the owner, 2026-10-28): only names, maps where a place is named and the source / AI tags stay;
+        # straight cuts with a short crossfade now and then; no punch, look or transition sounds.
+        cleancut.apply(doc)
     # Catch a malformed plan here rather than inside headless Chrome. Media may
     # still be missing at plan time — that is what the editor is for. One bad
     # graphic is dropped, never the video (a 30-minute job failed on one).
@@ -3268,7 +3272,8 @@ CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "GAMEPLAY_FOOTAGE", "JUDGE_BEST_OF", "EX
                       "PERSON_CLIPS_FIRST", "STILL_FRAME", "STILL_CARD_UPSCALE", "STILL_PEAK_MAGNIFICATION",
                       "STILL_MOTION_MAX_ZOOM", "PICTURE_COPY_CHECK", "PICTURE_COPY_BITS", "LOOK_PLACE_ON_BUILD",
                       "STILLS_TO_CLIPS_MAX_RUN", "VISION_NEWS_CREATOR_MARKS", "SLIP_CHECKS", "AI_FILL_NEWS_EVENTS",
-                      "AI_FILL_LABEL", "LOOKS_END_AT_CUTS", "DATES_ONE_PLACE")
+                      "AI_FILL_LABEL", "LOOKS_END_AT_CUTS", "DATES_ONE_PLACE",
+                      "CLEAN_CUT", "CLEAN_CUT_NAMES", "CLEAN_CUT_MAPS")
 
 
 def _apply_config(overrides) -> dict:
@@ -3583,6 +3588,9 @@ def handler(job):
     # job carries it: the tags cite it where a line states one of those facts (src/sources.py). The research is
     # kept out of the story brief, so no model call ever carries it.
     sources.fold_job_switch(inp)
+    # Clean cut (src/cleancut.py; news_compilation's default): the job's "clean_cut" and its config, folded in
+    # before the config is applied, so every part and pod of the job reads the same.
+    cleancut.fold_job(inp)
     sources.use_research(inp)
     # The job's "fast_sourcing" (the app's Fast build switch) as its own overrides: its search split over parts.
     fanout.fold_fast_sourcing(inp)

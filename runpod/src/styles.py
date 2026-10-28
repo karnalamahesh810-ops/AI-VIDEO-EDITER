@@ -83,6 +83,9 @@ STYLES: Dict[str, dict] = {
                    # a clip try costs ~20-30 s, and the Hoover Dam video (2026-10-26) ran out of clip tries at ~3.7
                    # a line with 1 in 9 usable.
                    "CLIPS_FIRST_CLIP_SHARE": 0.8,
+                   # Its reference shows no on-screen text (measured 2026-09-30) and the owner dislikes our
+                   # graphics (2026-10-28): clean cut - names and place maps only, straight cuts (src/cleancut.py).
+                   "CLEAN_CUT": True,
                    # Its reference holds real photos still; ours move, but gently (a 6 % push at most).
                    "STILL_MOTION_MAX_ZOOM": 1.06,
                    "PHOTO_MAX_PER_10MIN": 8.0,
