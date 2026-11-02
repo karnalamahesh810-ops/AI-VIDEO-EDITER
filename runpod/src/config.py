@@ -401,6 +401,10 @@ VISION_KIE_MAX_CONCURRENCY = int(os.getenv("VISION_KIE_MAX_CONCURRENCY", "8"))
 # with their station logo, headline banner and ticker as they are. Off = the
 # old rule (any other channel's text or logo rejects a clip).
 NEWS_FOOTAGE = _flag("NEWS_FOOTAGE", True)
+# Field footage only (the storm desk style, src/styles.py; off for every other style): the judge also turns down an
+# interview, a press conference, a reporter or creator talking to camera and hands or feet filling the frame
+# (vision.FIELD_FOOTAGE_RULE) - the owner's rule for a breaking-news compilation (2026-11-02).
+FIELD_FOOTAGE_ONLY = _flag("FIELD_FOOTAGE_ONLY", False)
 # The news rule spelt out for the judge (vision._NEWS_OVERLAY_RULE): a station's or outlet's logo, an agency's
 # mark, a webcam's ID and timestamp, a 'video courtesy of' credit and news banners are not "text or watermark";
 # another channel's stamp on a re-upload and a creator's captions still are. Off = the news rule as before.

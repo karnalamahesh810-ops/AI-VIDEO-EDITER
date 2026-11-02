@@ -102,6 +102,7 @@ from src import recut, reclip, relook, restore
 from src import topics
 from src import spares
 from src import severe
+from src import stormdesk
 from src import machine
 from src import batch, sources
 from src import editing
@@ -1181,6 +1182,9 @@ def _narration_fields(doc: dict) -> dict:
 
 def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     gputools.reset()                           # this job's GPU tools stats, retimed clips and music bed
+    # The channels this job never uses (src/stormdesk.blocklist: the storm desk style's own list and the job's
+    # "blocked_sources"); empty for every other job - nothing blocked, as before.
+    media.set_blocked_channels(stormdesk.blocklist(inp))
     if presenter_hybrid.block(inp):
         # A presenter block naming no usable kit fails now, before anything is paid for (src/presenter/hybrid.py).
         presenter_hybrid.kit_for(inp)
@@ -1254,6 +1258,19 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     if not words:
         raise ValueError("no speech detected in the narration audio")
     resume.note_words(words)
+    # The storm desk style's natural-sound pauses (src/stormdesk.py): chosen on the narration's own words, cut
+    # into the narration file itself (silences), so the planner, the music and the editor all see one timeline.
+    # The padded file is stored beside the original (never over it: a re-plan pads the original again).
+    inp.pop("_storm_pauses", None)
+    if stormdesk.is_style(inp):
+        padded = stormdesk.prepare_narration(
+            inp, words, audio_path, audio_duration or (words[-1].end + 0.5), work,
+            store=lambda local: _store_narration(local, "_stormdesk.mp3", inp))
+        if padded:
+            words, audio_duration = padded["words"], padded["duration"]
+            audio_src = padded["url"] or audio_path
+            inp["_storm_pauses"] = padded["pauses"]
+            inp["_storm_narration"] = padded["url"]
     # Cut where an editor would (src/transcribe.py human_cuts): the visual
     # track runs from frame 0 to the narration's end.
     segments = transcribe.segment_words(words, origin=0.0, until=audio_duration or None)
@@ -1926,7 +1943,7 @@ def _plan_document(inp: dict, work: str, report: Reporter) -> dict:
     return do_plan(inp, work, report)
 
 
-def _after_plan(doc: dict, work: str, report: Reporter) -> None:
+def _after_plan(doc: dict, work: str, report: Reporter, inp: Optional[dict] = None) -> None:
     """
     The checks a planned timeline gets before it is published. The AI
     presenter's shots were made and checked by its own pipeline: the footage
@@ -1938,8 +1955,49 @@ def _after_plan(doc: dict, work: str, report: Reporter) -> None:
         return
     _no_repeats(doc, report)            # the last look before the editor gets it
     _hook_check(doc, work, report)      # the opening's clips judged on their own cuts
+    if inp is not None and stormdesk.is_style(inp):
+        _storm_desk(doc, inp, work, report)
     _keep_in_library(doc, report)
     ledger.note(doc)                    # while the photos are still here to hash
+
+
+def _storm_desk(doc: dict, inp: dict, work: str, report: Reporter) -> None:
+    """
+    The storm desk style's pass over the finished plan (src/stormdesk.py): the natural-sound pause clips, hard
+    cuts, 5 s shots, credits and ARCHIVE labels, blurred platform marks, the variety and look-alike checks, the
+    headlines and the graphics, the music level, the contact sheet. After the repeat ladder and the hook check,
+    so what it reports is what the editor gets. Never fails the job.
+    """
+    report("Storm desk: pauses, headlines, graphics and checks", 64)
+    project_id = inp.get("project_id") or ""
+
+    def ask(system: str, payload: dict):
+        return director._chat_json(system, payload, timeout=60, routine=True) if director.is_configured() else None
+
+    def upload(local: str, name: str) -> str:
+        if not r2.enabled():
+            return ""
+        folder = f"projects/{project_id}" if project_id else f"jobs/{inp.get('_job_id') or uuid.uuid4().hex}"
+        return r2.upload(local, r2.tokened(f"{folder}/stormdesk/{name}"), content_type="image/jpeg",
+                         deadline=time.time() + 120)
+    try:
+        brief = (doc.get("meta") or {}).get("story") or {}
+        rep = stormdesk.finish(doc, inp, brief, work, ask=ask, upload=upload,
+                               frame_vertical=upscale.frame_vertical if config.ALLOW_VERTICAL else None)
+        # The padded narration (the pauses' silences): every render reads it, never the job's original upload.
+        if inp.get("_storm_narration"):
+            rep["narration"] = inp["_storm_narration"]
+        doc.setdefault("meta", {})["stormDesk"] = rep
+        print(f"[stormdesk] {rep.get('summary')}", flush=True)
+        events.emit("plan", "storm_desk", level="warning" if rep.get("issues") else "info",
+                    message=str(rep.get("summary") or "")[:300],
+                    data={k: rep.get(k) for k in ("shots", "longestShot", "sameSourceInARow", "aiInOpening",
+                                                   "blurredClips", "flippedClips", "headlinesBy", "archiveShots")})
+    except Exception as e:  # noqa: BLE001 - the plan as it is beats a failed job
+        print(f"[stormdesk] pass skipped: {type(e).__name__}: {str(e)[:200]}", flush=True)
+        doc.setdefault("meta", {})["stormDesk"] = {"error": f"{type(e).__name__}: {str(e)[:200]}"}
+    timeline.drop_invalid_overlays(doc)
+    timeline.validate(doc, require_media=False, allow_stock=inp.get("allow_stock"))
 
 
 def _replan_beat(scene: dict, doc: dict, story: dict, title: str) -> dict:
@@ -2668,6 +2726,11 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter,
     # The caller's fresh narration link wins: the plan's own link is signed
     # for hours, and a timeline can sit in the editor for days.
     source = inp.get("audio_url") or (doc.get("meta") or {}).get("audioSource")
+    # A storm desk video plays the narration with its pauses cut in (src/stormdesk.py), stored at plan time; the
+    # app still sends the original upload.
+    padded = ((doc.get("meta") or {}).get("stormDesk") or {}).get("narration") if stormdesk.is_style(doc=doc) else ""
+    if padded:
+        source = padded
     if source:
         try:
             doc["audio"]["url"] = storage.resolve_audio(
@@ -2776,8 +2839,23 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter,
     checked = gate.finish()
     doc.setdefault("meta", {})["quality"] = checked
     report(checked["summary"], 90)
+    if stormdesk.is_style(doc=doc):
+        # The pauses' own sound (the renderer mutes every clip), -14 LUFS, a clean delivery file and the
+        # picture's length against the timeline (src/stormdesk.after_render). A sync failure fails the job;
+        # anything else keeps the drawn file as it is and says so.
+        report("Storm desk: pause sound, loudness, clean file", 90)
+        try:
+            sd = stormdesk.after_render(doc, out_path, work)
+        except stormdesk.SyncError:
+            raise
+        except Exception as e:  # noqa: BLE001 - the drawn video still ships
+            sd = {"error": f"{type(e).__name__}: {str(e)[:300]}"}
+            print(f"[stormdesk] after the render: {sd['error']}", flush=True)
+        doc["meta"].setdefault("stormDesk", {})["render"] = sd
     # What goes back with the video: the gate's report and, when it ran, the review's.
     reports = {"quality": checked}
+    if isinstance((doc.get("meta") or {}).get("stormDesk"), dict) and doc["meta"]["stormDesk"].get("render"):
+        reports["stormDesk"] = doc["meta"]["stormDesk"]["render"]
     reviewed = reviewer.finish()
     if reviewed:
         doc["meta"]["review"] = reports["review"] = reviewed
@@ -3218,6 +3296,8 @@ CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "ANIMATION_FILL", "GAMEPLAY_FOOTAGE", "J
                       # parts) and its pass-1 time - each can be A/B'd on one job.
                       "VISION_SHEET_IMAGES", "VISION_COMPACT_TILES", "JUDGE_MEMORY_VIDEO_STRIKES", "BUILD_FANOUT",
                       "VISION_NEWS_OVERLAYS_OK",
+                      # The storm desk style (src/stormdesk.py): field footage only, its master loudness.
+                      "FIELD_FOOTAGE_ONLY", "LOUDNESS_TARGET_LUFS",
                       "SINGLE_PASS1_PER_SCENE", "SINGLE_TAIL_SECONDS",
                       # Each line's own sourcing trace in meta.sourcing.traces (the benchmark, 2026-10-08), and
                       # how long pass 1 waits for the lines it closed on to hand back what they hold.
@@ -3985,7 +4065,7 @@ def handler(job):
 
         if action == "plan":
             doc = _plan_document(inp, work, report)
-            _after_plan(doc, work, report)
+            _after_plan(doc, work, report, inp)
             aifill.annotate(doc)                # (the checks above may have made more: src/aifill.py)
             # Without this the timeline points at files this job is about to
             # delete. See publish_media().
@@ -4088,7 +4168,7 @@ def handler(job):
 
         if action == "build":
             doc = _plan_document(inp, work, report)
-            _after_plan(doc, work, report)
+            _after_plan(doc, work, report, inp)
             aifill.annotate(doc)                # (the checks above may have made more: src/aifill.py)
             if project_id:
                 # Saved before the render: a failure there keeps the search.

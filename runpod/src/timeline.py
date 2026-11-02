@@ -1706,6 +1706,11 @@ def _build(segments: List[Segment], shots: List[dict],
                 **({"cutCheck": dict(asset.cut_check)} if asset is not None and getattr(asset, "cut_check", None)
                    else {}),
                 "provider": getattr(asset, "source", "") or "",
+                # The uploader and upload day when the search said (the storm desk style's credits and ARCHIVE
+                # labels, src/stormdesk.py); left out when unknown.
+                **({"channel": asset.channel} if asset is not None and getattr(asset, "channel", "") else {}),
+                **({"uploadDate": asset.upload_date} if asset is not None and getattr(asset, "upload_date", "")
+                   else {}),
                 # What makes this clip this clip (video id + moment), so the
                 # clip library can keep and re-find it.
                 "assetId": getattr(asset, "identity", "") if asset is not None else "",

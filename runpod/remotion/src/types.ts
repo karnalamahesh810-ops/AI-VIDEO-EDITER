@@ -332,6 +332,13 @@ export interface Scene {
   effects?: ClipEffect[];
   mask?: ClipMask;
   motionBlur?: boolean | number;
+  /**
+   * The storm desk style (src/stormdesk.py): the shot's on-screen credit ("VIDEO: source"; archive = an upload
+   * older than the event; ai = an AI shot) drawn top-right by components/brand/StormDesk.tsx, and natSound = a
+   * natural-sound pause (the narration stops; the clip's own sound is mixed in after the render).
+   */
+  credit?: { text: string; archive?: boolean; ai?: boolean };
+  natSound?: boolean;
 }
 
 /** One row of a chart, comparison or timeline. */
@@ -630,8 +637,26 @@ export interface ChannelMarkDoc {
   font?: string;
 }
 
+/**
+ * The storm desk style's graphics (src/stormdesk.py graphics(); components/brand/StormDesk.tsx): colours (the
+ * brand kit's, else the measured reference's), the logo (a picture, else the channel name as text), the lower
+ * thirds (2 lines + tab), the location / date chips, the subscribe pills, and whether the credits show.
+ */
+export interface StormDeskDoc {
+  version?: number;
+  colors?: Record<string, string>;
+  logo?: { url?: string; text?: string };
+  bug?: { opacity?: number };
+  lowerThirds?: { startFrame: number; durationInFrames: number; lines: string[]; tab?: string }[];
+  location?: { startFrame: number; durationInFrames: number; place: string; date: string } | null;
+  subscribe?: { startFrame: number; durationInFrames: number }[];
+  credits?: boolean;
+}
+
 export interface TimelineProps {
   schemaVersion?: number;
+  /** The storm desk style's graphics (StormDeskDoc); absent = none. */
+  stormDesk?: StormDeskDoc | null;
   /** The channel's watermark (ChannelMarkDoc); absent = none. */
   channelMark?: ChannelMarkDoc | null;
   fps: number;

@@ -141,6 +141,43 @@ STYLES: Dict[str, dict] = {
                    # build had 8 of them).
                    "ANIMATION_FILL": False},
     },
+    # Storm desk (2026-11-02; docs/style-refs/global-storm-desk/STYLE.md, the owner's Henderson and Sedona builds,
+    # tools/storm-desk/): a breaking-news compilation in the Global Storm Desk format under the owner's rules -
+    # real eyewitness and news clips only (no AI unless the job turns AI fill on, never in the first minute),
+    # every narration shot <= 5 s, hard cuts, vertical clips in the measured 1135 px centre panel on a blurred
+    # copy, 7 s natural-sound pauses, no clip sound under the voice, no captions / looks / sound effects, one
+    # source never twice in a row nor the same moment twice. src/stormdesk.py does the pauses, the graphics in
+    # the customer's brand (logo bug, lower thirds, location / date chips, subscribe pill), the credits, the
+    # blurred platform marks, the checks and the -14 LUFS clean delivery file.
+    "storm_desk": {
+        "label": "Storm desk (breaking news)",
+        "transitions": "documentary", "graphics": "minimal",
+        "inputs": {"sfx": False, "editing_v3": False, "bgm": False, "captions": False},
+        "config": {"MIN_SCENE_SECONDS": 2.2, "TARGET_SCENE_SECONDS": 4.0, "MAX_SCENE_SECONDS": 5.0,
+                   "CUT_FAST_SECONDS": 4.0, "CUT_SLOW_SECONDS": 4.6, "CUT_HOOK_FACTOR": 1.0,
+                   "CUT_LEAD_SECONDS": 0.1, "HUMAN_CUTS": True, "SHOT_MAX_SECONDS": 5.0,
+                   # Vertical phone clips in the measured centre panel: 1135 x 1080 (a 1.051 band).
+                   "ALLOW_VERTICAL": True, "VERTICAL_BAND_ASPECT": 1.051,
+                   "NEWS_FOOTAGE": True, "RECENT_FOOTAGE_FIRST": True,
+                   "IMAGE_MAX_PER_VIDEO": 0, "PREFER_GENERATED_IMAGES": False, "GENERATED_IMAGES_IN_HOOK": False,
+                   "HOOK_SECONDS": 60.0,
+                   "EYEWITNESS_SEARCHES": True, "REGION_BLOCKS": True, "COMING_SHOTS": True, "HOOK_INTENSITY": True,
+                   "MOTION_PREFERENCE": 0.12, "POOL_JUDGE_CLIPS": True,
+                   "CLIPS_FIRST": True, "CLIPS_FIRST_STILLS": True, "CLIP_RUNGS": 4,
+                   # One source never carries the video and never plays twice in a row: no chained clips, two
+                   # moments a video at most, two minutes between them.
+                   "CHAIN_SHOTS": False, "MAX_MOMENTS_PER_VIDEO": 2, "SAME_VIDEO_GAP_SECONDS": 90.0,
+                   "FILL_MAX_MOMENTS_PER_VIDEO": 3,
+                   # Real photos a small minority, held still; clips as shot.
+                   "PHOTO_MAX_PER_10MIN": 6.0, "STILL_MOTION": "none", "REFRAME_CLIPS": False,
+                   # Nothing drawn but the style's own four graphics (src/stormdesk.py).
+                   "MARKS_ENABLED": False, "DATA_GRAPHICS": False, "TRANSITION_PACK": False,
+                   "HOOK_BOOST": False, "AMBIENCE": False, "RISERS": False, "ANIMATION_FILL": False,
+                   # Field footage only: no interview, press conference, presenter, creator to camera or hands /
+                   # feet filling the frame (vision.FIELD_FOOTAGE_RULE).
+                   "FIELD_FOOTAGE_ONLY": True,
+                   "LOUDNESS_TARGET_LUFS": -14.0},
+    },
     "trending_news": {
         "label": "Trending news",
         "transitions": "trending", "graphics": "normal",

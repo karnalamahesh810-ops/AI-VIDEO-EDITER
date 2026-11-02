@@ -317,7 +317,22 @@ def text_mode(scene: Optional[dict] = None, brief: Optional[dict] = None) -> str
     return "event" if event_footage_line(scene, brief) else "strict"
 
 
+# The storm desk style's field-footage rule (config.FIELD_FOOTAGE_ONLY; the owner, 2026-11-02): a breaking-news
+# compilation shows the event, never people explaining it. Appended to the judge's system prompt; off = unchanged.
+FIELD_FOOTAGE_RULE = (
+    "\nFIELD FOOTAGE ONLY (this video): the clip must show the event or the place itself. Answer "
+    "is_talking_head true and score 0 for an interview, a press conference or briefing at a podium, a reporter, "
+    "anchor, presenter, storm chaser or YouTuber talking to the camera (face-cam, selfie video), and for a shot "
+    "where hands, feet or legs fill the frame. A crowd, rescuers at work or people far away in the scene are "
+    "fine.\n")
+
+
 def _system(mode: str = "") -> str:
+    base = _system_text(mode)
+    return base + FIELD_FOOTAGE_RULE if getattr(config, "FIELD_FOOTAGE_ONLY", False) else base
+
+
+def _system_text(mode: str = "") -> str:
     mode = mode if mode in TEXT_MODES else ("news" if config.NEWS_FOOTAGE else "strict")
     if mode == "news":
         # Subtitles never welcome (VISION_NEWS_SUBTITLES, 2026-10-09); off: the rule as it was.

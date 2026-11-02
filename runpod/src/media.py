@@ -129,6 +129,10 @@ class MediaAsset:
     judged_by: str = ""
     # The opening check's verdict on this very cut (vision.cut_record).
     cut_check: Dict[str, Any] = field(default_factory=dict)
+    # The uploading channel and its upload day (YYYYMMDD) when the search said: the storm desk style credits the
+    # channel on screen and labels an older upload ARCHIVE (src/stormdesk.py). "" = not known.
+    channel: str = ""
+    upload_date: str = ""
 
     @property
     def identity(self) -> str:
@@ -1455,6 +1459,23 @@ _STOCK_SELLER = re.compile(
     re.IGNORECASE)
 
 
+# Channels this job never uses (the storm desk style's blocklist, src/stormdesk.blocklist: the owner's list plus the
+# job's "blocked_sources"); set at the start of every plan, empty = nothing blocked (every other job, as before).
+BLOCKED_CHANNELS: List[str] = []
+
+
+def set_blocked_channels(names) -> None:
+    BLOCKED_CHANNELS[:] = [str(n) for n in (names or []) if str(n or "").strip()]
+
+
+def blocked_channel(title: str, channel: str) -> str:
+    """The blocklist entry a candidate matches by channel (or title), '' when none or no list."""
+    if not BLOCKED_CHANNELS:
+        return ""
+    from . import stormdesk
+    return stormdesk.blocked(channel or "", title or "", BLOCKED_CHANNELS)
+
+
 def _usable_title(title: str, channel: str = "", aspect: float = 0.0, context: str = "") -> bool:
     """
     The one title-and-shape check every source applies before spending
@@ -1466,6 +1487,8 @@ def _usable_title(title: str, channel: str = "", aspect: float = 0.0, context: s
     """
     if _stock_seller(title or "", channel or ""):
         return False
+    if blocked_channel(title or "", channel or ""):
+        return False                        # a channel the job's blocklist names (the owner's: never)
     from . import offtopic, topics
     seen_as = f"{title or ''}|{channel or ''}".lower()
     if topics.off_topic_title(title or "", channel or "", line=context or ""):
@@ -3537,6 +3560,9 @@ def meta_reject(info: Optional[dict], title: str = "", context: str = "", need: 
     """
     if not info:
         return ""
+    bl = blocked_channel(str(info.get("title") or ""), str(info.get("channel") or info.get("uploader") or ""))
+    if bl:
+        return f"a blocked source ({bl})"
     music = _music_upload(info, line or context)
     if music:
         return music
@@ -3794,6 +3820,7 @@ def _youtube_pool(query: str, out_dir: str, seconds: float, start_at: float,
             return
         asset = _asset_for(path, query, grab, require_cc, title=c.title)
         asset.url = f"https://www.youtube.com/watch?v={c.id}&t={int(point)}"
+        asset.channel, asset.upload_date = str(c.channel or ""), str(c.upload_date or "")
         asset.apply_verdict(verdict, intent_text)
         penalty = candidates.reuse_penalty(f"yt:{c.id}", c.channel, used, used_channels=_USED_CHANNELS)
         asset.final_score, asset.score_parts = candidates.final_score(
@@ -6946,6 +6973,7 @@ def _footage_pool(query: str, need: int, lengths: List[float], intent: str,
                 url=f"https://www.youtube.com/watch?v={cand['id']}&t={int(start + offset)}",
                 local_path=shot_path, duration=lengths[n],
                 attribution=f"YouTube: {cand['title']}",
+                channel=str(cand.get("channel") or ""), upload_date=str(cand.get("upload_date") or ""),
                 license=("Creative Commons Attribution (CC BY)" if require_cc
                          else "unverified — you must hold the rights"),
                 query=query, review_required=not require_cc,
