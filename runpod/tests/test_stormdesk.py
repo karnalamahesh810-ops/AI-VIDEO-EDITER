@@ -471,3 +471,46 @@ class RendererContractTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class HandlerWiringTests(unittest.TestCase):
+    def test_storm_desk_pass_runs_from_the_handler_and_the_plan_stays_valid(self):
+        import handler
+        from src import timeline
+        doc = FinishTests()._doc()
+        doc["meta"] = {"videoStyle": "storm_desk", "story": {"places": ["Henderson, Nevada"]}}
+        inp = {"video_style": "storm_desk", "_storm_pauses": [], "_storm_narration": "https://r2/n.mp3"}
+        msgs = []
+        with mock.patch.object(handler.director, "is_configured", return_value=False), \
+                mock.patch.object(handler.r2, "enabled", return_value=False):
+            handler._storm_desk(doc, inp, ".", lambda *a, **k: msgs.append(a))
+        rep = doc["meta"]["stormDesk"]
+        self.assertNotIn("error", rep)
+        self.assertEqual(rep["narration"], "https://r2/n.mp3")
+        timeline.validate(doc, require_media=False)
+        self.assertTrue(stormdesk.is_style(doc=doc))
+
+    @unittest.skipUnless(HAVE_FFMPEG, "ffmpeg")
+    def test_prepare_narration_pads_stores_and_shifts(self):
+        d = tempfile.mkdtemp()
+        try:
+            path = os.path.join(d, "narration.mp3")
+            subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i",
+                            "sine=frequency=300:sample_rate=48000:duration=95", "-c:a", "libmp3lame", path],
+                           check=True)
+            ws = words_of(SENTS * 3, wps=2.6)
+            ws = [w for w in ws if w.end < 94]
+            stored = []
+            got = stormdesk.prepare_narration({"video_style": "storm_desk", "storm_desk": {"pauses": 1}}, ws,
+                                              path, 95.0, d, store=lambda p: stored.append(p) or "https://r2/x")
+            self.assertIsNotNone(got)
+            self.assertEqual(got["url"], "https://r2/x")
+            self.assertEqual(len(got["pauses"]), 1)
+            self.assertAlmostEqual(got["duration"], 102.0, places=3)
+            self.assertAlmostEqual(stormdesk._probe(path)["duration"], 102.0, delta=0.1)
+            self.assertTrue(os.path.isfile(os.path.join(d, "narration.original.mp3")))
+            at = got["pauses"][0]["at"]
+            after = [w for w in got["words"] if w.start > at]
+            self.assertTrue(after and after[0].start - at >= 7.0)
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
