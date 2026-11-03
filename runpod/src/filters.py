@@ -873,7 +873,10 @@ def trim_clip(path: str, offset: float, seconds: float, timeout: int = 180) -> s
     base, _ = os.path.splitext(path)
     out = f"{base}_c{int(round(offset * 10)):05d}.mp4"
     cmd = ["ffmpeg", "-y", "-loglevel", "error", "-ss", f"{max(0.0, offset):.2f}", "-i", path,
-           "-t", f"{seconds:.2f}", "-an", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "20",
+           "-t", f"{seconds:.2f}",
+           *(["-map", "0:v:0", "-map", "0:a:0?", "-c:a", "aac", "-b:a", "128k"]
+             if getattr(config, "CLIP_AUDIO", False) else ["-an"]),
+           "-c:v", "libx264", "-preset", "ultrafast", "-crf", "20",
            "-pix_fmt", "yuv420p", "-movflags", "+faststart", out]
     try:
         subprocess.run(cmd, capture_output=True, timeout=timeout)

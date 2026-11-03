@@ -150,7 +150,7 @@ STYLES: Dict[str, dict] = {
     # the customer's brand (logo bug, lower thirds, location / date chips, subscribe pill), the credits, the
     # blurred platform marks, the checks and the -14 LUFS clean delivery file.
     "storm_desk": {
-        "label": "Storm desk (breaking news)",
+        "label": "Breaking News Desk",
         "transitions": "documentary", "graphics": "minimal",
         "inputs": {"sfx": False, "editing_v3": False, "bgm": False, "captions": False},
         "config": {"MIN_SCENE_SECONDS": 2.2, "TARGET_SCENE_SECONDS": 4.0, "MAX_SCENE_SECONDS": 5.0,
@@ -176,6 +176,9 @@ STYLES: Dict[str, dict] = {
                    # Field footage only: no interview, press conference, presenter, creator to camera or hands /
                    # feet filling the frame (vision.FIELD_FOOTAGE_RULE).
                    "FIELD_FOOTAGE_ONLY": True,
+                   # Clips keep their own sound (natural sound plays quietly under the voice, src/clipaudio.py),
+                   # one uploader at most ~7% of the runtime, phone Shorts of the event searched too.
+                   "CLIP_AUDIO": True, "CHANNEL_MAX_SHARE": 0.07, "SHORTS_QUERIES": True,
                    "LOUDNESS_TARGET_LUFS": -14.0},
     },
     "trending_news": {

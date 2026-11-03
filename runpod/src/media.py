@@ -1547,6 +1547,13 @@ def _talking_head(title: str, line: str = "") -> bool:
         hits = [h for h in hits if not _PLAY_WORDS.match(h)]
     if _EVENT_WINDOW.get():
         hits = [h for h in hits if h != "news"]
+    field = bool(getattr(config, "FIELD_FOOTAGE_ONLY", False))
+    if field:
+        # Field footage only (the storm desk style, the owner 2026-11-02): a station's raw video of the event is
+        # fine ("news"), an interview, a press conference, a briefing or a reporter / forecaster on camera never -
+        # not even when the line itself talks about one.
+        hits = [h for h in hits if h != "news"]
+        return bool(hits) or bool(_FIELD_TALK.search(title or ""))
     if config.NEWS_FOOTAGE:
         # News reports, interviews and press conferences are what GoMotion
         # shows for the event a line names; the judge still rejects an anchor
@@ -1558,6 +1565,14 @@ def _talking_head(title: str, line: str = "") -> bool:
     if hits and _SUBJECT_TYPE.get() == "person":
         hits = [h for h in hits if not _PERSON_WORDS.match(h)]
     return bool(hits)
+
+
+# The field-footage rule's own title words (config.FIELD_FOOTAGE_ONLY): people explaining the event on camera.
+_FIELD_TALK = re.compile(
+    r"\b(reporter|reporting live|live report|meteorologist|forecaster|forecast|weather (?:update|outlook|report)|"
+    r"officials? (?:say|said|says|speak|update)|sheriff (?:says|speaks)|mayor (?:says|speaks)|governor (?:says|speaks)|"
+    r"says|explains|speaks|newscast|full (?:show|broadcast|newscast)|in studio|studio|town hall|testif\w+|"
+    r"hearing|presser|news conference|sit-?down|one-on-one|face ?cam|selfie)\b", re.I)
 
 
 # Candidates kept (n) or dropped (rejected) on their title alone because no
@@ -2270,6 +2285,22 @@ def title_conflict(title: str, context: str = "") -> str:
     return ""
 
 
+# The event's day for this job (the storm desk style: its event_date, or the date the narration says;
+# stormdesk.event_day_for): an event line's footage uploaded more than EVENT_DAY_GRACE days before it shows another,
+# older event. None = the story-year rule only (every other job, as before).
+EVENT_DAY: List[Optional[datetime.date]] = [None]
+EVENT_DAY_GRACE = 1
+
+
+def set_event_day(day) -> None:
+    if isinstance(day, str) and day.strip():
+        try:
+            day = datetime.date.fromisoformat(day.strip()[:10])
+        except ValueError:
+            day = None
+    EVENT_DAY[0] = day if isinstance(day, datetime.date) else None
+
+
 def upload_conflict(info: Optional[dict], older_ok_years: int = 0) -> str:
     """
     An upload that cannot show this event: named for AI (src/slop.py
@@ -2292,6 +2323,14 @@ def upload_conflict(info: Optional[dict], older_ok_years: int = 0) -> str:
         return ""                               # a place or illustrative shot may be older
     year = brief.get("year")
     up = str(info.get("upload_date") or "")
+    day = EVENT_DAY[0]
+    if day is not None and re.fullmatch(r"\d{8}", up) and not older_ok_years:
+        try:
+            got = datetime.date(int(up[:4]), int(up[4:6]), int(up[6:8]))
+        except ValueError:
+            got = None
+        if got is not None and got < day - datetime.timedelta(days=EVENT_DAY_GRACE):
+            return f"uploaded {got.isoformat()}, before the event ({day.isoformat()})"
     if isinstance(year, int) and not isinstance(year, bool) and re.fullmatch(r"\d{8}", up):
         grace = max(1 if datetime.date.today().month <= 2 else 0, int(older_ok_years or 0))
         if int(up[:4]) < year - grace:
@@ -2828,7 +2867,7 @@ def _yt_fetch_retry(video_id: str, out_dir: str, start_at: float, seconds: float
         routes = _ytdlp.AVOID_ROUTES.set(frozenset(tried))
         chosen = _ytdlp.RETRY_CLIENT.set(client)
         try:
-            path = _yt_fetch(video_id, out_dir, start_at, seconds)
+            path = _yt_fetch(video_id, out_dir, start_at, seconds, audio=bool(getattr(config, "CLIP_AUDIO", False)))
         finally:
             _ytdlp.RETRY_CLIENT.reset(chosen)
             _ytdlp.AVOID_ROUTES.reset(routes)
@@ -6126,6 +6165,11 @@ def variety_violations(jobs: List[Dict[str, Any]], results) -> Dict[int, tuple]:
     out: Dict[int, tuple] = {}
     cap = photo_cap(_jobs_seconds(jobs))
     photos = 0
+    # One uploader's share of the runtime (config.CHANNEL_MAX_SHARE; the storm desk style's ~7%): its first shot
+    # always counts, a shot past the share is a soft break.
+    chan_share = float(getattr(config, "CHANNEL_MAX_SHARE", 0) or 0)
+    chan_total = _jobs_seconds(jobs)
+    chan_secs: Dict[str, float] = {}
     for i in sorted(by_index):
         a = _asset_at(results, i)
         if a is None:
@@ -6165,6 +6209,14 @@ def variety_violations(jobs: List[Dict[str, Any]], results) -> Dict[int, tuple]:
             out[i] = ((f"its video already supplies {len(prev)} scenes" if 0 < cap <= len(prev)
                        else f"its video plays within {config.SAME_VIDEO_GAP_SECONDS:.0f} s"), "soft")
             continue
+        ch = re.sub(r"[^a-z0-9]+", "", str(getattr(a, "channel", "") or "").lower())
+        if chan_share > 0 and ch and chan_total > 0:
+            secs = float(job.get("seconds") or 0.0)
+            had = chan_secs.get(ch, 0.0)
+            if had > 0 and had + secs > chan_share * chan_total + 0.5:
+                out[i] = (f"its channel already fills {100 * had / chan_total:.0f}% of the video", "soft")
+                continue
+            chan_secs[ch] = had + secs
         shots.add(a.identity)
         prev.append(starts.get(i))
     return out
@@ -6901,11 +6953,18 @@ SEQ_SHOT_PAD = 0.5
 SEQ_PARALLEL_SEARCHES = 3
 
 
+def _audio_args() -> List[str]:
+    """ffmpeg's sound options for a re-cut clip: none (-an), or its own sound kept (config.CLIP_AUDIO)."""
+    if getattr(config, "CLIP_AUDIO", False):
+        return ["-map", "0:v:0", "-map", "0:a:0?", "-c:a", "aac", "-b:a", "128k"]
+    return ["-an"]
+
+
 def _cut(src: str, out: str, start: float, seconds: float) -> str:
     """Re-encode [start, start+seconds) of src to its own file; "" on failure."""
     try:
         subprocess.run(["ffmpeg", "-v", "error", "-y", "-ss", f"{start:.2f}", "-i", src,
-                        "-t", f"{seconds:.2f}", "-an", "-c:v", "libx264", "-preset",
+                        "-t", f"{seconds:.2f}", *_audio_args(), "-c:v", "libx264", "-preset",
                         "veryfast", "-crf", "18", "-pix_fmt", "yuv420p",
                         "-movflags", "+faststart", out],
                        capture_output=True, timeout=120)

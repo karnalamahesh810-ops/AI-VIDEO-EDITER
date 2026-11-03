@@ -1262,6 +1262,13 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     # into the narration file itself (silences), so the planner, the music and the editor all see one timeline.
     # The padded file is stored beside the original (never over it: a re-plan pads the original again).
     inp.pop("_storm_pauses", None)
+    # The event's day (src/stormdesk.event_day_for: the job's event_date, else a recent date the narration says):
+    # an event line's footage uploaded before it is turned down (media.upload_conflict). None for other styles.
+    day = stormdesk.event_day_for(inp, words) if stormdesk.is_style(inp) else None
+    media.set_event_day(day)
+    inp["_event_day"] = day.isoformat() if day else ""
+    if day:
+        print(f"[stormdesk] event day {day.isoformat()}: older uploads are turned down for event lines", flush=True)
     if stormdesk.is_style(inp):
         padded = stormdesk.prepare_narration(
             inp, words, audio_path, audio_duration or (words[-1].end + 0.5), work,
@@ -1517,6 +1524,10 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     gapfill.remember(jobs, work, library=lib, require_cc=require_cc, youtube_only=flags["youtube_only"])
     # Parts on other workers apply the same per-job config overrides.
     fan_flags = ({**flags, "config": inp["config"]} if isinstance(inp.get("config"), dict) else flags)
+    # ... and the same blocklist, event day and edit prompt (they are this job's, not the worker's settings).
+    fan_flags = {**fan_flags, "blocked_sources": list(media.BLOCKED_CHANNELS),
+                 "event_day": inp.get("_event_day") or "",
+                 **({"edit_prompt": director.edit_prompt()} if director.edit_prompt() else {})}
     # PACKS_FIRST (off; A/B one job with {"config": {"PACKS_FIRST": true}}): before any
     # search, the lines a niche pack clip fits best (src/packs.py) - never the hook,
     # never a line that needs its exact event or place. Those lines are settled here
@@ -2261,6 +2272,18 @@ def do_resource(inp: dict, work: str, report: Reporter) -> tuple:
     tone = grade.measure(scene["media"]) if grade.is_local(scene["media"].get("url")) else None
     if tone:
         scene["media"]["tone"] = tone
+    # A storm desk timeline: what the new clip's own sound is (src/clipaudio.py), so the editor shows it and the
+    # mix knows whether it may play under the voice.
+    if stormdesk.is_style(doc=doc) and asset.kind == "video" and grade.is_local(scene["media"].get("url")):
+        try:
+            from src import clipaudio
+            m = scene["media"]
+            m["clipAudio"] = clipaudio.classify(m["url"], float(m.get("trimStart") or 0.0),
+                                                int(scene.get("durationInFrames") or 0) / float(doc.get("fps") or 30),
+                                                title=stormdesk.source_title(scene))
+            m["clipAudio"].pop("parts", None)
+        except Exception as e:  # noqa: BLE001 - unknown: silent under the voice
+            print(f"[stormdesk] clip sound of the new clip unread: {type(e).__name__}", flush=True)
     scene["query"] = query
     scene["motion"] = (timeline._IMAGE_MOTIONS[idx % len(timeline._IMAGE_MOTIONS)]
                        if asset.kind == "image" else "none")
@@ -3298,6 +3321,8 @@ CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "ANIMATION_FILL", "GAMEPLAY_FOOTAGE", "J
                       "VISION_NEWS_OVERLAYS_OK",
                       # The storm desk style (src/stormdesk.py): field footage only, its master loudness.
                       "FIELD_FOOTAGE_ONLY", "LOUDNESS_TARGET_LUFS",
+                      # ... its clips' own sound kept, its per-channel share, its Shorts-style eyewitness searches.
+                      "CLIP_AUDIO", "CHANNEL_MAX_SHARE", "SHORTS_QUERIES",
                       "SINGLE_PASS1_PER_SCENE", "SINGLE_TAIL_SECONDS",
                       # Each line's own sourcing trace in meta.sourcing.traces (the benchmark, 2026-10-08), and
                       # how long pass 1 waits for the lines it closed on to hand back what they hold.
@@ -3676,6 +3701,15 @@ def handler(job):
     report = Reporter(reports_to, job=job)
     work = _work_dir(job_id)
     gapfill.reset()                     # the fallback ladder's plan is this job's own
+    # The channels and the event day this job's footage answers to (src/stormdesk.py): a warm worker's last job's
+    # never carry over. A plan sets them again from its narration (do_plan), a part from its parent's flags, a
+    # Replace Clip of a storm desk timeline from the timeline.
+    media.set_blocked_channels(stormdesk.blocklist(inp))
+    tl_meta = (inp.get("timeline") or {}).get("meta") if isinstance(inp.get("timeline"), dict) else None
+    media.set_event_day(((tl_meta or {}).get("stormDesk") or {}).get("eventDate") if action == "resource"
+                        and isinstance(tl_meta, dict) else None)
+    # The job's own words on how the edit should look (every style; director.set_edit_prompt).
+    director.set_edit_prompt(inp.get("edit_prompt"))
     spares.reset()                      # and the footage this job downloaded and kept for its empty lines
     pools.reset()                       # and the spare pool moments it may draw on
     shotcap.reset()                     # and what the shot cap cut and swapped
@@ -3721,6 +3755,9 @@ def handler(job):
 
             media.reset_cache()
             media.set_youtube_only(bool(inp.get("youtube_only")))
+            # The parent's blocklist and event day (a part has no video_style of its own to read them from).
+            media.set_blocked_channels(inp.get("blocked_sources") or [])
+            media.set_event_day(inp.get("event_day") or None)
             if inp.get("allow_youtube") is not False:
                 _require_youtube(quick=True)    # a blocked machine fails fast; the parent redoes its part
             media.limit_generation(inp.get("image_budget", config.IMAGE_MAX_PER_VIDEO))

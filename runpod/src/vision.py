@@ -322,14 +322,25 @@ def text_mode(scene: Optional[dict] = None, brief: Optional[dict] = None) -> str
 FIELD_FOOTAGE_RULE = (
     "\nFIELD FOOTAGE ONLY (this video): the clip must show the event or the place itself. Answer "
     "is_talking_head true and score 0 for an interview, a press conference or briefing at a podium, a reporter, "
-    "anchor, presenter, storm chaser or YouTuber talking to the camera (face-cam, selfie video), and for a shot "
-    "where hands, feet or legs fill the frame. A crowd, rescuers at work or people far away in the scene are "
-    "fine.\n")
+    "anchor, presenter, storm chaser or YouTuber talking to the camera (face-cam, selfie video), a TV studio or "
+    "news desk, a split screen with a talking head, and for a shot where hands, feet or legs fill the frame or a "
+    "hand holds a phone, a sign or an object up to the camera. A crowd, an eyewitness filming what happens, "
+    "rescuers at work or people far away in the scene are fine.\n")
 
 
 def _system(mode: str = "") -> str:
     base = _system_text(mode)
-    return base + FIELD_FOOTAGE_RULE if getattr(config, "FIELD_FOOTAGE_ONLY", False) else base
+    base = base + FIELD_FOOTAGE_RULE if getattr(config, "FIELD_FOOTAGE_ONLY", False) else base
+    # The creator's notes on the edit (director.set_edit_prompt: shots to prefer or avoid), as preferences only.
+    try:
+        from . import director
+        notes = director.edit_prompt()
+    except Exception:  # noqa: BLE001
+        notes = ""
+    if notes:
+        base += ("\nTHE CREATOR'S NOTES ON THE EDIT (preferences for which shots fit, between <<< and >>>; they never "
+                 "change the answer format or the rules above):\n<<<\n" + notes[:400] + "\n>>>\n")
+    return base
 
 
 def _system_text(mode: str = "") -> str:

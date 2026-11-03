@@ -405,6 +405,17 @@ NEWS_FOOTAGE = _flag("NEWS_FOOTAGE", True)
 # interview, a press conference, a reporter or creator talking to camera and hands or feet filling the frame
 # (vision.FIELD_FOOTAGE_RULE) - the owner's rule for a breaking-news compilation (2026-11-02).
 FIELD_FOOTAGE_ONLY = _flag("FIELD_FOOTAGE_ONLY", False)
+# Clips downloaded WITH their own sound and kept through the trims (the storm desk style: natural sound plays
+# quietly under the narration, src/clipaudio.py + stormdesk.under_track). Off = video-only, as before; the
+# renderer mutes every clip either way.
+CLIP_AUDIO = _flag("CLIP_AUDIO", False)
+# One uploader's share of a video's runtime that counts as too much (the storm desk style: the owner's ~7%):
+# a further shot from that channel is a soft variety break (media.variety_violations), replaced when anything
+# else is found. 0 = no channel cap, as before.
+CHANNEL_MAX_SHARE = float(os.getenv("CHANNEL_MAX_SHARE", "0") or 0)
+# Eyewitness searches also ask for Shorts-style uploads ("<place> <event> #shorts": phone video posted as a
+# Short - the storm desk style frames vertical clips in its centre panel).
+SHORTS_QUERIES = _flag("SHORTS_QUERIES", False)
 # The news rule spelt out for the judge (vision._NEWS_OVERLAY_RULE): a station's or outlet's logo, an agency's
 # mark, a webcam's ID and timestamp, a 'video courtesy of' credit and news banners are not "text or watermark";
 # another channel's stamp on a re-upload and a creator's captions still are. Off = the news rule as before.
