@@ -67,6 +67,33 @@ line first in meta.warnings.
 
 Without the block nothing here runs: every timeline is byte-for-byte what it
 was (tests/test_aifill.py, golden fixtures made with the base commit 536a8a3).
+
+Avatarity first (the owner, 2026-11-03: "it must use the other API, not
+OpenRouter, so we get the same models on my cheaper API"): with
+AVATARITY_API_KEY set and the block's provider "avatarity" (the default),
+every picture is asked of Avatarity's nano-banana-pro and every clip of its
+Veo 3.1 Lite at 720p, image-to-video from that line's own approved picture
+(src/avatarity.py). Its plan units count $0 in budget_usd (which then only
+covers OpenRouter: the prompt writing, the look checks and the backup) and
+are tracked instead (meta.aiFill.usage.avatarity, semanticMetadata.aiFill.
+units). OpenRouter is only the backup when Avatarity fails or its allowance
+is gone, and "openrouter_fallback": false switches the backup off. OpenRouter
+out of credit then only ends the backup, the prompt writing and the checks,
+never the Avatarity pictures.
+
+The owner's own numbers (2026-11-03: "videos look like a low number"):
+    "ai_fill": {"enabled": true, "max_pictures": 120, "max_clips": 80,
+                "fill_all": false, "openrouter_fallback": true}
+max_pictures (0-300) is the pictures shown, max_clips (0-200) the clips, each
+made from its own picture, so clips may outnumber pictures; the block's
+max_images is then their sum (an older app's max_images alone still means
+every AI scene, clips included). "fill_all": every line with no real footage
+gets an AI shot (the pictures number is ignored; clips stay capped). The
+lines are chosen before anything is made: the clips on the lines a clip
+fits, the pictures on the rest, both in the order below - so the numbers are
+reached whenever the video has that many gaps, and the pass's time box grows
+with them (AI_FILL_MAX_SECONDS). Real footage still comes first: only lines
+nothing real was found for are filled.
 """
 from __future__ import annotations
 
@@ -91,8 +118,14 @@ AI_SOURCE = "ai-generated"
 
 DEFAULT_MAX_IMAGES = 20
 DEFAULT_MAX_CLIPS = 3
-MAX_IMAGES_LIMIT = 60
-MAX_CLIPS_LIMIT = 10
+# The owner's own numbers (2026-11-03): pictures 0-300, clips 0-200, every AI scene of a video at most 500 (the
+# limits were 60 and 10).
+MAX_PICTURES_LIMIT = 300
+MAX_CLIPS_LIMIT = 200
+MAX_IMAGES_LIMIT = MAX_PICTURES_LIMIT + MAX_CLIPS_LIMIT
+# What the look checks and the prompt writing cost on OpenRouter per AI scene with Avatarity making the pictures
+# and clips (~$0.001-0.003 a check, two at most a scene; ~$0.002 per 30 lines described).
+CHECKS_USD = 0.004
 # What the app shows and sizes the budget with (docs: the app's ai-fill contract), per quality: the standard
 # chains ~$0.05 a picture and ~$0.13-0.15 a clip; budget (the default since 2026-10-25) ~$0.035 a picture (1K) and
 # ~$0.06-0.08 a clip (480p, no audio, sharpened afterwards). The budget is that with half again on top for retries
@@ -177,26 +210,106 @@ def block(inp: Optional[dict]) -> Optional[Dict[str, Any]]:
     from . import styles
     if styles.resolve(inp.get("video_style")) == "ai_presenter":
         return None
-    max_images = _int(raw.get("max_images"), DEFAULT_MAX_IMAGES, 0, MAX_IMAGES_LIMIT)
-    max_clips = min(_int(raw.get("max_clips"), DEFAULT_MAX_CLIPS, 0, MAX_CLIPS_LIMIT), max_images)
+    fill_all = _yes(raw.get("fill_all"))
+    max_pictures: Optional[int] = None
+    if fill_all or "max_pictures" in raw:
+        # The owner's own numbers (2026-11-03): pictures and clips apart, a clip made from its own picture.
+        max_clips = _int(raw.get("max_clips"), DEFAULT_MAX_CLIPS, 0, MAX_CLIPS_LIMIT)
+        max_pictures = MAX_PICTURES_LIMIT if fill_all else _int(raw.get("max_pictures"), DEFAULT_MAX_IMAGES, 0,
+                                                                MAX_PICTURES_LIMIT)
+        max_images = min(MAX_IMAGES_LIMIT, max_pictures + max_clips)
+    else:
+        # An older app's block: max_images is every AI scene, the clips among them.
+        max_images = _int(raw.get("max_images"), DEFAULT_MAX_IMAGES, 0, MAX_IMAGES_LIMIT)
+        max_clips = min(_int(raw.get("max_clips"), DEFAULT_MAX_CLIPS, 0, MAX_CLIPS_LIMIT), max_images)
     quality = quality_of(raw.get("quality"))
+    prov = provider_fields(raw)
+    plan = prov["provider"] == "avatarity" and _avatarity_key()
     try:
         budget = float(raw.get("budget_usd"))
         if not math.isfinite(budget):
             raise ValueError
     except (TypeError, ValueError):
-        budget = default_budget(max_images, max_clips, quality)
+        budget = default_budget(max_images, max_clips, quality) if not plan or prov["openrouter_fallback"] \
+            else checks_budget(max_images)
     budget = round(max(0.0, min(float(config.AI_FILL_MAX_BUDGET), budget)), 2)
-    if max_images <= 0 or budget <= 0:
+    # (On the Avatarity plan a zero budget still makes pictures: only the checks and the prompt writing stop.)
+    if max_images <= 0 or (budget <= 0 and not plan):
         return None
     out = {"enabled": True, "max_images": max_images, "max_clips": max_clips, "budget_usd": budget,
            "quality": quality}
+    if max_pictures is not None:
+        out["max_pictures"] = max_pictures
+    if fill_all:
+        out["fill_all"] = True
+    out.update(prov)
     # A job's own chains (an A/B, or the bake-off's winner before it becomes a default): [[model, size], ...].
     for key in ("image_models", "video_models"):
         got = _model_list(raw.get(key))
         if got:
             out[key] = got
     return out
+
+
+def _yes(v: Any) -> bool:
+    return v is True or str(v).strip().lower() in ("1", "true", "yes", "on")
+
+
+def checks_budget(scenes: int) -> float:
+    """The OpenRouter cap of an Avatarity job with the backup off: its look checks and prompt writing."""
+    return round(max(0.25, CHECKS_USD * max(0, scenes) + 0.05), 2)
+
+
+def _avatarity_key() -> bool:
+    from . import avatarity
+    return avatarity.configured()
+
+
+def provider_fields(raw: Optional[dict]) -> Dict[str, Any]:
+    """provider / models / resolution / backup switch / unit caps of a job's ai_fill block, normalised (defaults:
+    config.AI_PROVIDER, Nano Banana Pro, Veo 3.1 Lite, 720p, the backup on)."""
+    from . import avatarity
+    raw = raw if isinstance(raw, dict) else {}
+    prov = str(raw.get("provider") or config.AI_PROVIDER or "avatarity").strip().lower()
+    prov = prov if prov in ("avatarity", "openrouter") else "avatarity"
+    img = avatarity.bare(str(raw.get("image_model") or "").strip())
+    vid = avatarity.bare(str(raw.get("video_model") or "").strip())
+    fb = raw.get("openrouter_fallback")
+    out: Dict[str, Any] = {
+        "provider": prov,
+        "openrouter_fallback": bool(config.AI_FILL_OPENROUTER_FALLBACK) if fb is None else _yes(fb),
+        "resolution": avatarity.resolution_for(str(raw.get("resolution") or config.AVATARITY_RESOLUTION)),
+        "max_video_units": _int(raw.get("max_video_units"), config.AVATARITY_MAX_VIDEO_UNITS, 0,
+                                config.AVATARITY_MAX_VIDEO_UNITS),
+        "max_av_images": _int(raw.get("max_av_images"), config.AVATARITY_MAX_IMAGES, 0, config.AVATARITY_MAX_IMAGES)}
+    if prov == "avatarity":
+        out["image_model"] = img if img in avatarity.IMAGE_MODELS else config.AVATARITY_IMAGE_MODEL
+        out["video_model"] = vid if vid in avatarity.VIDEO_MODELS else config.AVATARITY_VIDEO_MODEL
+    return out
+
+
+def _avatarity_on() -> bool:
+    """This job asks Avatarity first: its block says so, the key is set, and its allowance has not run out."""
+    b = _STATE.get("block") or {}
+    return bool(b) and b.get("provider", config.AI_PROVIDER) == "avatarity" and _avatarity_key() \
+        and not _STATE.get("av_gone")
+
+
+def _plan_job() -> bool:
+    """This job was set up for the Avatarity plan (even after its allowance ran out)."""
+    b = _STATE.get("block") or {}
+    return bool(b) and b.get("provider", config.AI_PROVIDER) == "avatarity" and _avatarity_key()
+
+
+def _backup_on() -> bool:
+    """The OpenRouter chains may still be asked: no Avatarity for this job, or its backup is on and OpenRouter
+    has not run out of credit."""
+    b = _STATE.get("block") or {}
+    if _STATE.get("or_out"):
+        return False
+    if not _plan_job():
+        return True
+    return bool(b.get("openrouter_fallback", config.AI_FILL_OPENROUTER_FALLBACK))
 
 
 def _model_list(value: Any) -> List[Tuple[str, str]]:
@@ -250,8 +363,7 @@ def _quality_now(quality: Optional[str] = None) -> str:
     return quality_of(quality if quality else (_STATE.get("block") or {}).get("quality"))
 
 
-def image_models(quality: Optional[str] = None) -> List[Tuple[str, str]]:
-    """The picture models in the order tried: the job's own chain, else its quality's (budget: 1K pictures)."""
+def _base_images(quality: Optional[str]) -> List[Tuple[str, str]]:
     own = (_STATE.get("block") or {}).get("image_models") if quality is None else None
     if own:
         return list(own)
@@ -260,8 +372,7 @@ def image_models(quality: Optional[str] = None) -> List[Tuple[str, str]]:
     return _models(config.AI_FILL_IMAGE_MODELS, _BUDGET_IMAGES)
 
 
-def video_models(quality: Optional[str] = None) -> List[Tuple[str, str]]:
-    """The clip models in the order tried: the job's own chain, else its quality's (budget: 480p, sharpened)."""
+def _base_clips(quality: Optional[str]) -> List[Tuple[str, str]]:
     own = (_STATE.get("block") or {}).get("video_models") if quality is None else None
     if own:
         return list(own)
@@ -270,7 +381,66 @@ def video_models(quality: Optional[str] = None) -> List[Tuple[str, str]]:
     return _models(config.AI_FILL_VIDEO_MODELS, _BUDGET_CLIPS)
 
 
+def image_models(quality: Optional[str] = None) -> List[Tuple[str, str]]:
+    """The picture models in the order tried: Avatarity's (Nano Banana Pro) first while the job uses it, then the
+    OpenRouter backup - the job's own chain, else its quality's (budget: 1K pictures) - unless the backup is off.
+    `quality` given: that quality's OpenRouter chain alone (the health report)."""
+    if quality is not None:
+        return _base_images(quality)
+    from . import avatarity
+    b = _STATE.get("block") or {}
+    chain = _base_images(None) if _backup_on() else []
+    if _avatarity_on():
+        chain = [(avatarity.PREFIX + (b.get("image_model") or config.AVATARITY_IMAGE_MODEL), "2K")] + chain
+    return chain
+
+
+def video_models(quality: Optional[str] = None) -> List[Tuple[str, str]]:
+    """The clip models in the order tried: Avatarity's Veo 3.1 Lite (720p, our HD pass after) first while the job
+    uses it, then the OpenRouter backup (budget: 480p, sharpened) unless it is off."""
+    if quality is not None:
+        return _base_clips(quality)
+    from . import avatarity
+    b = _STATE.get("block") or {}
+    chain = _base_clips(None) if _backup_on() else []
+    if _avatarity_on():
+        chain = [(avatarity.PREFIX + (b.get("video_model") or config.AVATARITY_VIDEO_MODEL),
+                  b.get("resolution") or avatarity.resolution_for(config.AVATARITY_RESOLUTION))] + chain
+    return chain
+
+
+def is_plan_model(model: str) -> bool:
+    """A model of the Avatarity plan (paid in units, not dollars)."""
+    return str(model or "").startswith("avatarity/")
+
+
+def _cheapest_image() -> Optional[float]:
+    """The cheapest picture the job can still ask for (None: no model is left)."""
+    chain = [(m, s) for m, s in image_models() if m not in _STATE.get("unavailable", set())]
+    return min((image_usd(m, s) for m, s in chain), default=None)
+
+
+def clip_usd_per_second(model: str, res: str) -> float:
+    if is_plan_model(model):
+        return 0.0
+    from .presenter import tiers
+    return tiers.usd_per_second(model, res)
+
+
+def clip_max_seconds(model: str) -> float:
+    """The longest line one clip of this model covers at real speed (Veo on Avatarity: ~8 s, a 0.5 s handle)."""
+    return 8.0 if is_plan_model(model) else float(CLIP_MAX_SECONDS)
+
+
+def clip_min_scene(model: str) -> float:
+    """The shortest line a clip of this model is made for: a plan clip costs a unit whatever its screen time, a
+    paid one is paid by the second (4 s at least)."""
+    return float(config.AVATARITY_CLIP_MIN_SCENE) if is_plan_model(model) else CLIP_MIN_SCENE
+
+
 def image_usd(model: str, size: str) -> float:
+    if is_plan_model(model):
+        return 0.0                                  # the plan's allowance (counted in units), not dollars
     prices = IMAGE_PRICES.get(model)
     if prices:
         return float(prices.get(size, max(prices.values())))
@@ -309,10 +479,16 @@ def start(inp: Optional[dict], *, work: str = "", project_id: str = "", job_id: 
     from .presenter.budget import Budget
     prior_pics, prior_clips = _count(doc)
     prior_usd = 0.0
+    prior_units = {"pictureUnits": 0, "clipUnits": 0}
     try:
         prior_usd = float((((doc or {}).get("meta") or {}).get("aiFill") or {}).get("spentUsd") or 0.0)
     except (TypeError, ValueError, AttributeError):
         prior_usd = 0.0
+    try:
+        got = ((((doc or {}).get("meta") or {}).get("aiFill") or {}).get("usage") or {}).get("avatarity") or {}
+        prior_units = {k: int(got.get(k) or 0) for k in prior_units}
+    except (TypeError, ValueError, AttributeError):
+        pass
     with _LOCK:
         _STATE.update(block=b, work=work or config.WORK_DIR, project_id=str(project_id or ""),
                       job_id=str(job_id or ""), budget=Budget(max(0.0, b["budget_usd"] - prior_usd)),
@@ -320,10 +496,20 @@ def start(inp: Optional[dict], *, work: str = "", project_id: str = "", job_id: 
                       images=0, clips=0, img_flight=0, clip_flight=0, failed=0, wasted=0,
                       rows=[], tried=set(), skipped=Counter(), unavailable=set(), stopped="", story=None,
                       provider=provider, store=store, cache=None, checker=None, motions=0, passes=[],
-                      started=time.time(), models_used=Counter())
-    print(f"[aifill] on: at most {b['max_images']} AI picture(s), {b['max_clips']} AI clip(s), "
-          f"${b['budget_usd']:.2f}" + (f" ({prior_pics} already on the timeline, ${prior_usd:.2f} spent)"
-                                       if prior_pics or prior_usd else ""), flush=True)
+                      started=time.time(), models_used=Counter(), fallbacks=[], av_gone="", or_out=False,
+                      prior_units=prior_units)
+    if _plan_job():
+        # This job's own count of the plan's units (the client is process-wide: one gate for every caller).
+        from . import avatarity
+        avatarity.reset_ledger()
+    pics = (f"{b['max_pictures']} AI picture(s) + {b['max_clips']} AI clip(s)" if "max_pictures" in b and
+            not b.get("fill_all") else f"every gap (clips at most {b['max_clips']})" if b.get("fill_all") else
+            f"at most {b['max_images']} AI picture(s), {b['max_clips']} of them clips")
+    where = ("Avatarity first" + (", OpenRouter backup" if b.get("openrouter_fallback") else ", no backup")
+             if _plan_job() else "OpenRouter")
+    print(f"[aifill] on: {pics}; {where}; OpenRouter cap ${b['budget_usd']:.2f}"
+          + (f" ({prior_pics} already on the timeline, ${prior_usd:.2f} spent)" if prior_pics or prior_usd else ""),
+          flush=True)
     return True
 
 
@@ -364,15 +550,67 @@ def can_make() -> bool:
         if not enabled() or _STATE.get("stopped"):
             return False
         budget = _STATE.get("budget")
-        cheapest = min(image_usd(m, s) for m, s in image_models())
-        return _images_left() > 0 and budget is not None and budget.left() >= cheapest
+        cheapest = _cheapest_image()
+        return _images_left() > 0 and budget is not None and cheapest is not None and budget.left() >= cheapest
+
+
+def _av_caps() -> None:
+    """Past this video's Avatarity caps (max_video_units / max_av_images): the rest goes to the backup (or, with
+    the backup off, stops)."""
+    from . import avatarity
+    b = _STATE.get("block") or {}
+    if _STATE.get("av_gone") or not b or not _plan_job():
+        return
+    led = avatarity.ledger()
+    if led.get("videoUnits", 0) >= int(b.get("max_video_units", config.AVATARITY_MAX_VIDEO_UNITS)) or \
+            led.get("images", 0) >= int(b.get("max_av_images", config.AVATARITY_MAX_IMAGES)):
+        _avatarity_gone("this video's Avatarity cap was reached")
+
+
+def _avatarity_gone(why: str) -> None:
+    """Avatarity cannot make more for this job (allowance used up, no plan, this video's cap): the OpenRouter
+    backup carries on when it is on; without it AI fill stops."""
+    with _LOCK:
+        if _STATE.get("av_gone"):
+            return
+        _STATE["av_gone"] = why[:160]
+        backup = _backup_on()
+        note_fallback(f"Avatarity: {why[:120]} - " + ("the rest was made on OpenRouter" if backup else
+                                                      "the OpenRouter backup is off, so AI fill stopped there"))
+    print(f"[aifill] Avatarity unavailable for this job: {why[:160]}", flush=True)
+    if not backup:
+        _stop("Avatarity is out and the OpenRouter backup is off")
+
+
+def _openrouter_out() -> None:
+    """OpenRouter answered 402 (out of credit). On the Avatarity plan only the backup, the prompt writing and the
+    look checks end (the plan's pictures and clips go on); otherwise AI fill stops, as before."""
+    if _avatarity_on():
+        with _LOCK:
+            first = not _STATE.get("or_out")
+            _STATE["or_out"] = True
+        if first:
+            note_fallback("OpenRouter is out of credit: no backup, no prompt writing and no look checks for the "
+                          "rest of this video (Avatarity carried on)")
+            print("[aifill] OpenRouter is out of credit: Avatarity only from here", flush=True)
+        return
+    _stop("OpenRouter is out of credit")
+
+
+def note_fallback(text: str) -> None:
+    with _LOCK:
+        fb = _STATE.setdefault("fallbacks", [])
+        if text not in fb:
+            fb.append(text)
 
 
 def _take_image() -> bool:
+    _av_caps()
     with _LOCK:
         budget = _STATE.get("budget")
-        if _STATE.get("stopped") or _images_left() <= 0 or budget is None or \
-                budget.left() < min(image_usd(m, s) for m, s in image_models()):
+        cheapest = _cheapest_image()
+        if _STATE.get("stopped") or _images_left() <= 0 or budget is None or cheapest is None or \
+                budget.left() < cheapest:
             return False
         _STATE["img_flight"] += 1
         return True
@@ -389,11 +627,12 @@ def _done_image(ok: bool) -> None:
 
 def _take_clip(projected: float, pictures_to_come: int) -> bool:
     """A clip may start: under max_clips, and the budget still holds every picture this pass is to make."""
+    _av_caps()
     with _LOCK:
         budget = _STATE.get("budget")
         if _STATE.get("stopped") or _clips_left() <= 0 or budget is None:
             return False
-        keep = max(0, pictures_to_come) * min(image_usd(m, s) for m, s in image_models())
+        keep = max(0, pictures_to_come) * (_cheapest_image() or 0.0)
         if budget.left() - keep < projected:
             _STATE["skipped"]["clip: budget kept for pictures"] += 1
             return False
@@ -414,7 +653,15 @@ def _tools(work: str):
         if _STATE.get("checker") is not None:
             return _STATE["provider"], _STATE["store"], _STATE["cache"], _STATE["checker"]
         from .presenter import checks, providers, store as store_mod
-        prov = _STATE.get("provider") or providers.OpenRouter()
+        prov = _STATE.get("provider")
+        if prov is None:
+            # Avatarity first (src/avatarity.py: models "avatarity/<id>"); OpenRouter for every other model, the
+            # prompt writing and the look checks.
+            if _plan_job():
+                from . import avatarity
+                prov = avatarity.provider()
+            else:
+                prov = providers.OpenRouter()
         if not prov.available():
             _stop("no OpenRouter key is configured")
             return None
@@ -694,7 +941,8 @@ def compose(what: str, bible: Dict[str, str], line: str = "", person: bool = Fal
         parts.append("People, if any, are ordinary and anonymous: at a distance, from behind or out of focus; hands "
                      "natural with five fingers.")
     parts.append("No text anywhere: no readable signs, captions, labels, numbers, logos, brand names or watermarks. "
-                 "One single photograph - not a collage, an illustration, a painting, a 3D render, a map or a chart.")
+                 "One single photograph - not a collage, an illustration, a painting, a 3D render, a map or a chart. "
+                 "It fills the whole 16:9 frame edge to edge: no frame border, no rounded corners, no polaroid edge.")
     return " ".join(p for p in parts if p)
 
 
@@ -815,12 +1063,67 @@ def _lines(doc: dict, only: Optional[Sequence[dict]], story: dict, why: str) -> 
 
 def _key_lines(lines: Sequence[Line]) -> List[str]:
     """The lines a clip is made for (by key), the most worth it first: the opening, then a story section's first
-    line, then the longest - each 2.5-5.5 s, so a 4-6 s clip covers it at real speed."""
-    fits = [ln for ln in lines if CLIP_MIN_SCENE <= ln.seconds <= CLIP_MAX_SECONDS - CLIP_HANDLE and not ln.person]
+    line, then the longest - each from the first clip model's shortest line (Avatarity's Veo: 1.2 s, a plan unit
+    whatever its screen time; a paid model: 2.5 s) up to what one clip covers at real speed (~8 s Veo on
+    Avatarity, 4-6 s clips on OpenRouter). A real person's line is never animated."""
+    chain = [(m, r) for m, r in video_models() if m not in _STATE.get("unavailable", set())]
+    if not chain:
+        return []
+    lo, hi = clip_min_scene(chain[0][0]), clip_max_seconds(chain[0][0]) - CLIP_HANDLE
+    fits = [ln for ln in lines if lo <= ln.seconds <= hi and not ln.person]
     fits.sort(key=lambda ln: (0 if ln.hook else 1 if ln.opens_section else 2, ln.start if ln.hook else -ln.seconds))
     with _LOCK:
         n = max(0, _clips_left())
     return [ln.key for ln in fits[:n]]
+
+
+def _pictures_left() -> Optional[int]:
+    """Pictures (stills) still allowed by the block's max_pictures - None: no separate cap (an older block's
+    max_images counts every AI scene; fill_all: every gap)."""
+    b = _STATE.get("block") or {}
+    if "max_pictures" not in b or b.get("fill_all"):
+        return None
+    stills = (int(_STATE.get("prior_images", 0)) - int(_STATE.get("prior_clips", 0))
+              + int(_STATE.get("images", 0)) - int(_STATE.get("clips", 0)))
+    return max(0, int(b["max_pictures"]) - stills)
+
+
+def choose(lines: Sequence[Line], keys: set) -> Tuple[List[Line], int]:
+    """
+    The lines this pass makes, in the order made: every clip line (it needs its own picture first) and, with a
+    separate pictures cap, only as many picture-only lines as it leaves - so the owner's two numbers are both
+    reached when the video has the gaps. Returns (lines, how many were left out for the pictures cap).
+    """
+    room = _pictures_left()
+    if room is None:
+        return list(lines), 0
+    out: List[Line] = []
+    left = 0
+    for ln in lines:
+        if ln.key in keys:
+            out.append(ln)
+        elif room > 0:
+            out.append(ln)
+            room -= 1
+        else:
+            left += 1
+    return out, left
+
+
+# One Avatarity task (measured 2026-10-28 .. 11-02): a picture ~25-35 s, a Veo clip ~40-90 s; 4 at a time.
+AV_PICTURE_SECONDS = 30.0
+AV_CLIP_SECONDS = 90.0
+
+
+def time_box(stills: int, clips: int) -> float:
+    """One pass's time box: AI_FILL_SECONDS, or what this many Avatarity pictures and clips take 4 at a time
+    (a quarter on top for retries and checks), never past AI_FILL_MAX_SECONDS."""
+    base = float(config.AI_FILL_SECONDS)
+    if not _avatarity_on():
+        return base
+    slots = max(1, int(os.getenv("AVATARITY_CONCURRENCY", "4") or 4))
+    need = (max(0, stills) * AV_PICTURE_SECONDS + max(0, clips) * AV_CLIP_SECONDS) / slots * 1.25 + 120.0
+    return max(base, min(float(config.AI_FILL_MAX_SECONDS), need))
 
 
 # ------------------------------------------------------------------ the pictures' descriptions
@@ -878,7 +1181,7 @@ def describe(lines: Sequence[Line], story: dict, tools) -> int:
     from .presenter.budget import BudgetExceeded
     from .presenter.providers import ProviderError
     models = list(config.AI_FILL_PROMPT_MODELS or [])
-    if not lines or not models:
+    if not lines or not models or _STATE.get("or_out"):
         return 0
     prov, store, _cache, _checker = tools
     folder = _STATE.get("folder") or os.path.join(_STATE.get("work") or config.WORK_DIR, "aifill")
@@ -913,7 +1216,7 @@ def describe(lines: Sequence[Line], story: dict, tools) -> int:
             except ProviderError as e:
                 _STATE["budget"].release(ticket, str(e))
                 if _out_of_credit(e):
-                    _stop("OpenRouter is out of credit")
+                    _openrouter_out()
                     return done
                 print(f"[aifill] descriptions on {model} failed: {str(e)[:140]}", flush=True)
                 continue
@@ -1001,7 +1304,8 @@ def _still_once(line: Line, model: str, size: str, prompt: str, attempt: int, to
         url, cached = str(hit.get("url") or ""), str(hit.get("cached") or "disk")
     else:
         budget = _STATE["budget"]
-        ticket = budget.reserve(round(image_usd(model, size) * 1.25, 4), f"{line.scene.get('id')} AI picture")
+        # (A plan picture is never in the dollar budget: no reservation, $0 counted.)
+        ticket = None if is_plan_model(model) else             budget.reserve(round(image_usd(model, size) * 1.25, 4), f"{line.scene.get('id')} AI picture")
         try:
             res = prov.image(ImageRequest(model=model, prompt=prompt, size=size, aspect_ratio="16:9"))
         except ProviderError as e:
@@ -1010,7 +1314,7 @@ def _still_once(line: Line, model: str, size: str, prompt: str, attempt: int, to
             else:
                 budget.release(ticket, str(e))
             raise
-        usd = budget.settle(ticket, res.cost, model=model, kind="image", seconds=res.seconds)
+        usd = budget.settle(ticket, res.cost, model=model, kind="image", seconds=res.seconds) if ticket else 0.0
         costs.record("image.usd", usd)
         costs.record("image.aifill.usd", usd)
         costs.record("image.aifill.calls")
@@ -1024,7 +1328,7 @@ def _still_once(line: Line, model: str, size: str, prompt: str, attempt: int, to
     if problems:
         print(f"[aifill] {line.scene.get('id')}: picture rejected: {', '.join(problems)}", flush=True)
         return None
-    verdict = checker.broll(path, line.what, stem, video=False) if config.AI_FILL_CHECK \
+    verdict = checker.broll(path, line.what, stem, video=False) if _checks_on() \
         else {"ok": True, "checked": False}
     if not verdict.get("ok"):
         print(f"[aifill] {line.scene.get('id')}: picture check failed: {verdict.get('issues')} "
@@ -1036,6 +1340,10 @@ def _still_once(line: Line, model: str, size: str, prompt: str, attempt: int, to
         _STATE["models_used"][model] += 1
     return Made(kind="still", path=path, model=model, usd=usd, url=url, prompt=prompt, cached=cached,
                 checks={"look": verdict})
+
+
+def _checks_on() -> bool:
+    return bool(config.AI_FILL_CHECK) and not _STATE.get("or_out")
 
 
 def _out_of_credit(err) -> bool:
@@ -1061,7 +1369,8 @@ def make_still(line: Line, tools) -> Optional[Made]:
     k = 0
     while k < len(chain) and tries < 2 and not _STATE.get("stopped"):
         model, size = chain[k]
-        if model in _STATE["unavailable"]:
+        if model in _STATE["unavailable"] or (not is_plan_model(model) and not _backup_on()) or \
+                (is_plan_model(model) and _STATE.get("av_gone")):
             k += 1
             continue
         prompt = f"{line.prompt} {fix_text(issues, line.what)}".strip() if issues else line.prompt
@@ -1073,13 +1382,16 @@ def make_still(line: Line, tools) -> Optional[Made]:
             why.append(f"budget: {e}")
             break
         except ProviderError as e:
-            if _out_of_credit(e):
-                _stop("OpenRouter is out of credit")
-                break
+            if _out_of_credit(e) and not is_plan_model(model):
+                _openrouter_out()
+                k += 1
+                continue
             if _model_gone(e):
                 with _LOCK:
                     _STATE["unavailable"].add(model)
                 print(f"[aifill] {model} is not available: {str(e)[:120]}", flush=True)
+                if is_plan_model(model):
+                    _avatarity_gone(str(e)[:120])
                 k += 1
                 continue
             tries += 1
@@ -1110,6 +1422,8 @@ def make_still(line: Line, tools) -> Optional[Made]:
 def _clip_len(model: str, seconds: float) -> Optional[int]:
     from .presenter import tiers
     need = seconds + CLIP_HANDLE
+    if is_plan_model(model):
+        return 8 if need <= 8.0 + 1e-6 else None   # Veo on Avatarity: ~8 s, its length cannot be set
     durations = sorted(int(d) for d in (tiers.model_info(model).get("durations") or [4, 5, 6, 8]))
     for d in durations:
         if d + 1e-6 >= max(need, CLIP_MIN_SECONDS):
@@ -1170,10 +1484,15 @@ def make_clip(line: Line, still: Made, tools) -> Optional[Made]:
     why: List[str] = []
     tries = 0
     for model, res in video_models():
-        # Two paid tries at most, down the chain (budget: Seedance 480p, then 720p, Veo 3.1 Lite, Grok Lite).
+        # Two tries at most, down the chain (Avatarity's Veo first on the plan; then budget: Seedance 480p, 720p,
+        # Veo 3.1 Lite, Grok Lite).
         if _STATE.get("stopped") or tries >= 2:
             break
-        if model in _STATE["unavailable"]:
+        if model in _STATE["unavailable"] or (not is_plan_model(model) and not _backup_on()) or \
+                (is_plan_model(model) and _STATE.get("av_gone")):
+            continue
+        if line.seconds < clip_min_scene(model) - 1e-6:
+            why.append(f"{model}: a {line.seconds:.1f} s line is too short for a paid clip")
             continue
         seconds = _clip_len(model, line.seconds)
         if seconds is None:
@@ -1199,26 +1518,30 @@ def make_clip(line: Line, still: Made, tools) -> Optional[Made]:
                 url, cached = str(hit.get("url") or ""), str(hit.get("cached") or "disk")
             else:
                 budget = _STATE["budget"]
-                projected = round(seconds * tiers.usd_per_second(model, res) * 1.05 + 0.02, 4)
-                ticket = budget.reserve(projected, f"{line.scene.get('id')} AI clip")
+                projected = 0.0 if is_plan_model(model) else \
+                    round(seconds * clip_usd_per_second(model, res) * 1.05 + 0.02, 4)
+                ticket = None if is_plan_model(model) else budget.reserve(projected, f"{line.scene.get('id')} AI clip")
                 try:
                     job = prov.submit_video(req)
                 except ProviderError as e:
                     budget.release(ticket, str(e))
                     raise
                 try:
-                    got = prov.wait_video(job, timeout=min(600.0, float(config.AI_FILL_SECONDS)), poll=8.0)
+                    wait_s = float(config.AVATARITY_CLIP_TIMEOUT) if is_plan_model(model) else \
+                        min(600.0, float(config.AI_FILL_SECONDS))
+                    got = prov.wait_video(job, timeout=wait_s, poll=8.0)
                 except ProviderError as e:
                     budget.settle(ticket, None, model=model, kind="aivideo", job=job.id, error=str(e)[:120])
                     raise
                 if got.status != "completed":
-                    usd = budget.settle(ticket, got.cost or 0.0, model=model, kind="aivideo", job=job.id,
-                                        error=(got.error or got.status)[:120])
+                    usd = 0.0 if ticket is None else budget.settle(ticket, got.cost or 0.0, model=model,
+                                                                   kind="aivideo", job=job.id,
+                                                                   error=(got.error or got.status)[:120])
                     if usd > 0:
                         costs.record("aivideo.usd", usd)
                         costs.record("aivideo.aifill.usd", usd)
                     raise ProviderError(f"{model} {got.status}: {got.error[:160]}")
-                usd = budget.settle(ticket, got.cost, model=model, kind="aivideo", job=job.id, seconds=got.seconds)
+                usd = 0.0 if ticket is None else                     budget.settle(ticket, got.cost, model=model, kind="aivideo", job=job.id, seconds=got.seconds)
                 prov.download_video(job, got, raw)
                 costs.record("aivideo.usd", usd)
                 costs.record("aivideo.aifill.usd", usd)
@@ -1230,13 +1553,19 @@ def make_clip(line: Line, still: Made, tools) -> Optional[Made]:
             why.append(f"budget: {e}")
             break
         except ProviderError as e:
-            if _out_of_credit(e):
-                _stop("OpenRouter is out of credit")
-                break
+            if _out_of_credit(e) and not is_plan_model(model):
+                _openrouter_out()
+                if _STATE.get("stopped"):
+                    break
+                tries -= 1
+                why.append(f"{model}: OpenRouter is out of credit")
+                continue
             if _model_gone(e):
                 with _LOCK:
                     _STATE["unavailable"].add(model)
                 print(f"[aifill] {model} is not available: {str(e)[:120]}", flush=True)
+                if is_plan_model(model):
+                    _avatarity_gone(str(e)[:120])
                 tries -= 1                      # nothing was paid: the next model gets the try
             why.append(f"{model}: {str(e)[:140]}")
             continue
@@ -1257,13 +1586,18 @@ def make_clip(line: Line, still: Made, tools) -> Optional[Made]:
             why.append(f"{model}: {', '.join(problems)}")
             continue
         verdict = checker.broll(clip, line.what, f"aifill_{sid}_clip_{attempt}", video=True) \
-            if config.AI_FILL_CHECK else {"ok": True, "checked": False}
+            if _checks_on() else {"ok": True, "checked": False}
         if not verdict.get("ok"):
             issues = _found(verdict)
             why.append(f"{model}: the check turned it down ({', '.join(issues)[:80]})")
             continue
         costs.record("aivideo.screen_seconds", min(line.seconds, keep))
-        sharpened = sharpen(clip)
+        if is_plan_model(model):
+            from . import avatarity
+            # 720p from the plan + our HD pass to 1080 lines (measured better than their own "1080p").
+            sharpened = avatarity.hd_upscale(clip) if res != "1080p" else ""
+        else:
+            sharpened = sharpen(clip)
         info = media_io.probe(clip)
         with _LOCK:
             _STATE["models_used"][model] += 1
@@ -1335,6 +1669,11 @@ def _apply(doc: dict, line: Line, still: Made, clip: Optional[Made], label: str)
                      **({"motionPrompt": clip.prompt[:400]} if clip else {}),
                      **({"cached": made.cached} if made.cached else {}),
                      "checks": {k: v for k, v in (made.checks or {}).items() if k in ("look",)}}
+    sem["aiFill"]["provider"] = "avatarity" if is_plan_model(made.model) else "openrouter"
+    if is_plan_model(still.model) or (clip and is_plan_model(clip.model)):
+        units = {"images": still.attempts if is_plan_model(still.model) and not still.cached else 0,
+                 "video": (clip.attempts if clip and is_plan_model(clip.model) and not clip.cached else 0)}
+        sem["aiFill"]["units"] = units
     gapfill.drop_cards(doc, [s])
     if not clip:
         k = next((n for n, x in enumerate(doc.get("scenes") or []) if x is s), -1)
@@ -1375,22 +1714,34 @@ def fill_doc(doc: dict, *, work: str = "", story: Optional[dict] = None, only: O
     tools = _tools(work)
     if tools is None:
         return out
+    # The clips first (the lines one fits, up to max_clips), then - with the owner's separate pictures number - only
+    # as many picture-only lines as it allows: both numbers are reached when the video has the gaps.
+    keys = set(_key_lines(lines))
+    chosen, left_out = choose(lines, keys)
+    if left_out:
+        with _LOCK:
+            _STATE["skipped"]["max_pictures"] += left_out
+        out["capped"] += left_out
     try:
         # The lines about to be made (a few spares for the ones that fail), described by the prompt model.
-        out["described"] = describe(lines[:max(1, _images_left()) + 4], story, tools)
+        out["described"] = describe(chosen[:max(1, _images_left()) + 4], story, tools)
     except Exception as e:  # noqa: BLE001 - the rule-built prompts stand
         traceback.print_exc()
         print(f"[aifill] descriptions skipped: {type(e).__name__}: {str(e)[:120]}", flush=True)
-    keys = set(_key_lines(lines))
-    print(f"[aifill] {label or 'pass'}: {len(lines)} line(s) with no real shot, {_images_left()} picture(s) and "
-          f"{_clips_left()} clip(s) left, ${_STATE['budget'].left():.2f} of the budget", flush=True)
-    deadline = t0 + float(config.AI_FILL_SECONDS)
+    box = time_box(min(len(chosen), max(0, _images_left())), len(keys))
+    print(f"[aifill] {label or 'pass'}: {len(lines)} line(s) with no real shot, {len(chosen)} to make "
+          f"({len(keys)} as clips); {_images_left()} AI scene(s) and {_clips_left()} clip(s) left, "
+          f"${_STATE['budget'].left():.2f} of the OpenRouter cap, {box:.0f} s box", flush=True)
+    out["toMake"] = len(chosen)
+    out["clipLines"] = len(keys)
+    deadline = t0 + box
     stills: Dict[str, Made] = {}
     clips: Dict[str, Made] = {}
-    pending = deque(lines)
+    pending = deque(chosen)
     running: Dict[Future, Line] = {}
     clip_running: Dict[Future, Tuple[Line, Made]] = {}
     img_pool = ThreadPoolExecutor(max_workers=max(1, int(config.AI_FILL_PARALLEL)), thread_name_prefix="aifill")
+    # (On the plan the clips and pictures share Avatarity's 4 render slots: src/avatarity.py holds one per task.)
     vid_pool = ThreadPoolExecutor(max_workers=max(1, int(config.AI_FILL_CLIP_PARALLEL)),
                                   thread_name_prefix="aifill-clip") if keys else None
 
@@ -1435,10 +1786,11 @@ def fill_doc(doc: dict, *, work: str = "", story: Optional[dict] = None, only: O
                     stills[ln.key] = made
                     left = time.time()
                     if vid_pool is not None and ln.key in keys and deadline - left > CLIP_START_SECONDS:
-                        from .presenter import tiers
-                        model, res = video_models()[0]
-                        projected = (_clip_len(model, ln.seconds) or CLIP_MAX_SECONDS) * \
-                            tiers.usd_per_second(model, res) * 1.05 + 0.02
+                        chain = video_models()
+                        model, res = chain[0] if chain else ("", "")
+                        projected = 0.0 if not model or is_plan_model(model) else \
+                            (_clip_len(model, ln.seconds) or CLIP_MAX_SECONDS) * \
+                            clip_usd_per_second(model, res) * 1.05 + 0.02
                         if _take_clip(projected, len(pending) + len(running)):
                             clip_running[vid_pool.submit(guarded, make_clip, ln, made, tools)] = (ln, made)
                 else:
@@ -1523,7 +1875,14 @@ def health() -> Dict[str, Any]:
             "maxBudget": float(config.AI_FILL_MAX_BUDGET), "quality": q,
             "chains": {name: {"pictures": [list(x) for x in image_models(name)],
                               "clips": [list(x) for x in video_models(name)]} for name in QUALITIES},
-            "upscale": bool(getattr(config, "AI_FILL_UPSCALE", True))}
+            "upscale": bool(getattr(config, "AI_FILL_UPSCALE", True)),
+            # Avatarity (src/avatarity.py): the plan provider asked first when its key is set (no call made here).
+            "avatarity": {"key": _avatarity_key(), "provider": config.AI_PROVIDER,
+                          "image": config.AVATARITY_IMAGE_MODEL, "video": config.AVATARITY_VIDEO_MODEL,
+                          "resolution": config.AVATARITY_RESOLUTION,
+                          "openrouterFallback": bool(config.AI_FILL_OPENROUTER_FALLBACK)},
+            "limits": {"pictures": MAX_PICTURES_LIMIT, "clips": MAX_CLIPS_LIMIT, "scenes": MAX_IMAGES_LIMIT},
+            "maxSeconds": float(config.AI_FILL_MAX_SECONDS)}
 
 
 def report(doc: Optional[dict] = None) -> Dict[str, Any]:
@@ -1547,7 +1906,15 @@ def report(doc: Optional[dict] = None) -> Dict[str, Any]:
                        **({"sharpened": dict(_STATE["sharpened"])} if _STATE.get("sharpened") else {})},
             "passes": list(_STATE.get("passes") or []),
             "disclosure": DISCLOSURE,
+            "provider": "avatarity" if _plan_job() else "openrouter",
+            "openrouterFallback": bool(b.get("openrouter_fallback", True)) if _plan_job() else None,
         }
+        if "max_pictures" in b:
+            rep["maxPictures"] = int(b["max_pictures"])
+        if b.get("fill_all"):
+            rep["fillAll"] = True
+        if _STATE.get("fallbacks"):
+            rep["fallbacks"] = list(_STATE["fallbacks"])
         if _STATE.get("prior_images") or _STATE.get("prior_clips"):
             rep["before"] = {"images": int(_STATE.get("prior_images", 0)), "clips": int(_STATE.get("prior_clips", 0)),
                              "usd": round(float(_STATE.get("prior_usd", 0.0)), 4)}
@@ -1563,15 +1930,54 @@ def report(doc: Optional[dict] = None) -> Dict[str, Any]:
     return rep
 
 
+def usage(remote: bool = True) -> Dict[str, Any]:
+    """What this job took from the Avatarity plan (this worker's own count) and, with `remote`, what the plan has
+    left (one /usage call). {} for a job not on the plan."""
+    if not _plan_job():
+        return {}
+    from . import avatarity
+    c = avatarity.client()
+    if c is None:
+        return {}
+    led = avatarity.ledger()
+    before = _STATE.get("prior_units") or {}
+    # (A render adds what its own repairs took to what its timeline's plan took.)
+    out: Dict[str, Any] = {"pictureUnits": int(led.get("images", 0)) + int(before.get("pictureUnits", 0)),
+                           "clipUnits": int(led.get("videoUnits", 0)) + int(before.get("clipUnits", 0)),
+                           "clips": int(led.get("clips", 0)), "failed": int(led.get("failed", 0)),
+                           "retried": int(led.get("retried", 0))}
+    if remote:
+        try:
+            u = c.usage()
+            out.update(remainingClips=u["veo"].get("remaining"), remainingPictures=u["images"].get("remaining"),
+                       plan=u.get("plan") or "")
+        except Exception as e:  # noqa: BLE001 - the counts stand without the plan's own numbers
+            out["usageError"] = str(e)[:120]
+            out.update(remainingClips=c.remaining.get("veo"), remainingPictures=c.remaining.get("images"))
+    return out
+
+
 def annotate(doc: dict) -> None:
     """doc.meta.aiFill and, once anything was made, the YouTube disclosure line first in meta.warnings."""
     if not enabled() or not isinstance(doc, dict):
         return
     meta = doc.setdefault("meta", {})
     rep = report(doc)
+    rep["usage"] = {"avatarity": usage(), "openrouterUsd": round(float(rep.get("spentUsd") or 0.0), 4)}
     meta["aiFill"] = rep
     made = rep.get("images", 0) + rep.get("clips", 0) + sum((rep.get("inTimeline") or {}).values())
     if made:
         warnings = meta.setdefault("warnings", [])
         if isinstance(warnings, list) and DISCLOSURE not in warnings:
             warnings.insert(0, DISCLOSURE)
+
+
+def openrouter_need(b: Optional[Dict[str, Any]]) -> float:
+    """The OpenRouter credit a job's block needs before it starts (handler._ai_fill_budget): its whole budget on
+    OpenRouter; on the Avatarity plan only the look checks and the prompt writing."""
+    if not b:
+        return 0.0
+    budget = float(b.get("budget_usd") or 0.0)
+    if b.get("provider") == "avatarity" and _avatarity_key():
+        return min(budget, checks_budget(int(b.get("max_images") or 0)))
+    return budget

@@ -80,12 +80,21 @@ class Block(unittest.TestCase):
 
     def test_defaults_and_clamps(self):
         # Budget quality by default (2026-10-25): (20 x $0.035 + 3 x $0.07) x 1.5; standard keeps the old $2.13.
-        self.assertEqual(aifill.block({"ai_fill": {"enabled": True}}),
-                         {"enabled": True, "max_images": 20, "max_clips": 3, "budget_usd": 1.37, "quality": "budget"})
-        self.assertEqual(aifill.block({"ai_fill": {"enabled": True, "quality": "standard"}}),
-                         {"enabled": True, "max_images": 20, "max_clips": 3, "budget_usd": 2.13, "quality": "standard"})
+        # (+ the provider fields of 2026-11-03: Avatarity first when its key is set, tests/test_aifill_avatarity.py)
+        core = ("enabled", "max_images", "max_clips", "budget_usd", "quality")
+
+        def head(b):
+            return {k: b[k] for k in core}
+        with mock.patch.dict(os.environ, {"AVATARITY_API_KEY": ""}):
+            self.assertEqual(head(aifill.block({"ai_fill": {"enabled": True}})),
+                             {"enabled": True, "max_images": 20, "max_clips": 3, "budget_usd": 1.37,
+                              "quality": "budget"})
+            self.assertEqual(head(aifill.block({"ai_fill": {"enabled": True, "quality": "standard"}})),
+                             {"enabled": True, "max_images": 20, "max_clips": 3, "budget_usd": 2.13,
+                              "quality": "standard"})
+        self.assertEqual(aifill.block({"ai_fill": {"enabled": True}})["provider"], "avatarity")
         self.assertEqual(aifill.block({"ai_fill": {"enabled": True, "quality": "ultra"}})["quality"], "budget")
-        b = aifill.block({"ai_fill": {"enabled": True, "max_images": 500, "max_clips": 99, "budget_usd": "50"}})
+        b = aifill.block({"ai_fill": {"enabled": True, "max_images": 900, "max_clips": 999, "budget_usd": "50"}})
         self.assertEqual((b["max_images"], b["max_clips"], b["budget_usd"]),
                          (aifill.MAX_IMAGES_LIMIT, aifill.MAX_CLIPS_LIMIT, config.AI_FILL_MAX_BUDGET))
         b = aifill.block({"ai_fill": {"enabled": True, "max_images": 2, "max_clips": 5}})
