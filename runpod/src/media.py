@@ -2867,7 +2867,8 @@ def _yt_fetch_retry(video_id: str, out_dir: str, start_at: float, seconds: float
         routes = _ytdlp.AVOID_ROUTES.set(frozenset(tried))
         chosen = _ytdlp.RETRY_CLIENT.set(client)
         try:
-            path = _yt_fetch(video_id, out_dir, start_at, seconds, audio=bool(getattr(config, "CLIP_AUDIO", False)))
+            path = _yt_fetch(video_id, out_dir, start_at, seconds,
+                             **({"audio": True} if getattr(config, "CLIP_AUDIO", False) else {}))
         finally:
             _ytdlp.RETRY_CLIENT.reset(chosen)
             _ytdlp.AVOID_ROUTES.reset(routes)
