@@ -1449,6 +1449,8 @@ def make_pauses(doc: dict, pauses: List[dict], work: str, fetch: Optional[Callab
             if not mo or mo[0] in seen:
                 continue
             seen.add(mo[0])
+            if source_kind(_sm(c).get("channel") or "") not in ("station", "original", "creator"):
+                continue                        # never a re-uploader's (or an unknown uploader's) clip
             key = source_key(c)
             if key and key in (prev_key, next_key):
                 continue                        # never two shots in a row from one source
@@ -1611,7 +1613,7 @@ def cap_shots(doc: dict, cap: float = SHOT_MAX) -> int:
     limit = int(round(cap * fps)) + 1
     out, n = [], 0
     for s in doc["scenes"]:
-        if s.get("natSound") or (s.get("media") or {}).get("type") == "animation" or \
+        if s.get("natSound") or s.get("heldOver") or (s.get("media") or {}).get("type") == "animation" or \
                 int(s["durationInFrames"]) <= limit:
             out.append(s)
             continue
@@ -1741,6 +1743,7 @@ def repeats(doc: dict) -> List[dict]:
 # --------------------------------------------------------------------------- #
 
 PHOTO_SHARE_MAX = 0.10          # photos at most this share of the shots, the last resort; never in the opening
+HOLD_SLOWEST = 0.6              # a held-over original clip plays no slower than this (else it is not held)
 
 
 def is_photo(scene: dict) -> bool:
@@ -1877,7 +1880,7 @@ def resolve_channels(doc: dict, info: Optional[Callable[[str], dict]] = None) ->
     return n
 
 
-def _reuse_original(doc: dict, i: int, used: Dict[str, List[float]], gap: float) -> bool:
+def _reuse_original(doc: dict, i: int, used: Dict[str, List[float]], gap: float, allow_near: bool = False) -> bool:
     """Scene i from an original clip already in the video: the part of its file the video does not show (after
     or before the shot's own stretch, never overlapping it), from a source that is not the shot before's or
     after's. Repeat-safe: a different moment of an original source."""
@@ -1891,7 +1894,7 @@ def _reuse_original(doc: dict, i: int, used: Dict[str, List[float]], gap: float)
             continue
         if source_kind(_sm(d).get("channel") or "") not in ("station", "original", "creator"):
             continue
-        if source_key(d) in near:
+        if source_key(d) in near and not allow_near:
             continue
         cs = m.get("clipSeconds")
         if not isinstance(cs, (int, float)):
@@ -1935,12 +1938,36 @@ def _hold_previous(doc: dict, i: int) -> bool:
     if prev.get("natSound") or (prev.get("media") or {}).get("type") != "video" or \
             source_kind(_sm(prev).get("channel") or "") not in ("station", "original", "creator"):
         return False
-    if _clip_room(prev, fps) < (int(prev["durationInFrames"]) + int(cur["durationInFrames"])) / float(fps) - 0.05:
+    # Its clip may play down to HOLD_SLOWEST of its speed (the renderer slows a clip shorter than its scene).
+    if _clip_room(prev, fps) * (1.0 / HOLD_SLOWEST) < (int(prev["durationInFrames"]) + int(cur["durationInFrames"])) \
+            / float(fps) - 0.05:
         return False
     prev["durationInFrames"] = int(prev["durationInFrames"]) + int(cur["durationInFrames"])
     prev["words"] = list(prev.get("words") or []) + list(cur.get("words") or [])
     prev["text"] = (str(prev.get("text") or "") + " " + str(cur.get("text") or "")).strip()
     prev["heldOver"] = True
+    del sc[i]
+    return True
+
+
+def _hold_next(doc: dict, i: int) -> bool:
+    """_hold_previous the other way: the shot after it starts earlier and holds over both (slowed as needed)."""
+    fps = int(doc.get("fps") or 30)
+    sc = doc["scenes"]
+    if i + 1 >= len(sc):
+        return False
+    cur, nxt = sc[i], sc[i + 1]
+    if nxt.get("natSound") or (nxt.get("media") or {}).get("type") != "video" or \
+            source_kind(_sm(nxt).get("channel") or "") not in ("station", "original", "creator"):
+        return False
+    if _clip_room(nxt, fps) * (1.0 / HOLD_SLOWEST) < (int(nxt["durationInFrames"]) + int(cur["durationInFrames"])) \
+            / float(fps) - 0.05:
+        return False
+    nxt["startFrame"] = int(cur["startFrame"])
+    nxt["durationInFrames"] = int(nxt["durationInFrames"]) + int(cur["durationInFrames"])
+    nxt["words"] = list(cur.get("words") or []) + list(nxt.get("words") or [])
+    nxt["text"] = (str(cur.get("text") or "") + " " + str(nxt.get("text") or "")).strip()
+    nxt["heldOver"] = True
     del sc[i]
     return True
 
@@ -2047,15 +2074,27 @@ def replace_stills(doc: dict, pool: Optional[Callable[[dict], List[dict]]] = Non
         still_left.append((i, why))
     # Still nothing for an empty shot or a re-upload: the shot before holds longer (from the end, so the indexes
     # still to come stay right). Pictures past the share stay (a real photo beats an empty frame).
-    held, final_left = 0, []
-    for i, why in sorted(still_left, key=lambda t: -t[0]):
-        if why in ("empty", "a re-uploader's footage", "an unknown source", "text over the picture") \
-                and _hold_previous(doc, i):
-            held += 1
-        else:
-            final_left.append((i, why))
-    return {"replaced": done, "moved": moved, "held": held, "resolved": resolved,
-            "left": sorted(final_left)}
+    hard_why = ("empty", "a re-uploader's footage", "an unknown source", "text over the picture")
+    held = 0
+    for _round in range(6):                     # a hold can make the next one possible (its neighbour fixed)
+        changed = False
+        for i, why in sorted(stills_to_replace(doc), key=lambda t: -t[0]):
+            if why not in hard_why:
+                continue
+            if _hold_previous(doc, i) or _hold_next(doc, i):
+                held += 1
+                changed = True
+            elif _reuse_original(doc, i, used, gap, allow_near=True):
+                # Never a competitor's footage: another stretch of an original clip, even from the shot beside
+                # it (the owner: a repeat-safe reuse of originals beats a re-upload).
+                done += 1
+                changed = True
+        if not changed:
+            break
+    final_left = [(i, w) for i, w in stills_to_replace(doc)
+                  if w in hard_why or w in ("a picture in the opening", "soft / through glass")
+                  or w.startswith("more than")]
+    return {"replaced": done, "moved": moved, "held": held, "resolved": resolved, "left": sorted(final_left)}
 
 
 def shares(doc: dict) -> List[dict]:
@@ -2272,6 +2311,8 @@ def finish(doc: dict, inp: dict, brief: Optional[dict] = None, work: str = "", f
         s.pop("transitionGain", None)
 
     pauses = out_pauses(inp.get("_storm_pauses") or [])
+    # Who uploaded each shot, before anything is picked from them (the pauses take their clips from these sources).
+    rep["channelsResolvedFirst"] = step("channels", lambda: resolve_channels(doc)) or 0
     rep["pauses"] = step("pauses", lambda: make_pauses(doc, pauses, work, fetch, frame_vertical, check)) or []
     rep["cleanCheck"] = step("clean check", lambda: clean_check(doc)) or []
     st = step("stills", lambda: replace_stills(doc, check=check)) or {}
@@ -2457,7 +2498,9 @@ def finish(doc: dict, inp: dict, brief: Optional[dict] = None, work: str = "", f
     over = [r for r in rep["sources"] if r["share"] > SOURCE_CAP_SHARE + 0.005]
     rep["sourcesOverCap"] = over
     longest = max((int(s["durationInFrames"]) / fps for s in doc["scenes"]
-                   if not s.get("natSound") and (s.get("media") or {}).get("type") != "animation"), default=0.0)
+                   if not s.get("natSound") and not s.get("heldOver")
+                   and (s.get("media") or {}).get("type") != "animation"), default=0.0)
+    rep["heldShots"] = sum(1 for s in doc["scenes"] if s.get("heldOver"))
     rep["longestShot"] = round(longest, 2)
     rep["shots"] = len(doc["scenes"])
     rep["aiShots"] = sum(1 for s in doc["scenes"] if is_ai(s))

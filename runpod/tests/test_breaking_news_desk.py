@@ -773,6 +773,29 @@ class CleanShotTests(unittest.TestCase):
         self.assertFalse([s for s in doc["scenes"] if "_reject" in s or "_soft" in s])
 
 
+class OriginalFallbackTests(unittest.TestCase):
+    def test_hold_next_and_pause_pool_skips_reuploads(self):
+        sc = [scene(0, 0, 4, "AAAAAAAAAAA", "Storm-HQ", 10),
+              scene(1, 4, 8, "BBBBBBBBBBB", "Person B", 10, clip=9.0,
+                    words=[{"text": "y", "start": 5, "end": 5.4}])]
+        doc = doc_of(sc)
+        got = stormdesk.replace_stills(doc, pool=lambda job: [], take=lambda e: True, info=lambda v: {})
+        self.assertEqual(got["held"], 1)
+        self.assertEqual(len(doc["scenes"]), 1)
+        self.assertEqual((doc["scenes"][0]["startFrame"], doc["scenes"][0]["durationInFrames"]), (0, 8 * FPS))
+        self.assertTrue(doc["scenes"][0]["heldOver"])
+        # A held-over shot is not cut back to 5 s (a longer real shot beats a re-upload).
+        self.assertEqual(stormdesk.cap_shots(doc), 0)
+        # The pauses never take a re-uploader's clip.
+        sc = [scene(0, 0, 5, "AAAAAAAAAAA", "Storm-HQ", 10), scene(1, 5, 10, "BBBBBBBBBBB", "Weather Is Dangerous", 10),
+              scene(2, 10, 15, "CCCCCCCCCCC", "Global Weather Network", 10)]
+        doc = doc_of(sc)
+        asked = []
+        stormdesk.make_pauses(doc, [{"t0": 5.0, "t1": 12.0}], ".", fetch=lambda v, a, b: asked.append(v) or "",
+                              check=lambda p: "", spare_pool=lambda job: [], spare_take=lambda e: True)
+        self.assertEqual(asked, [])
+
+
 class EditPromptTests(unittest.TestCase):
     def tearDown(self):
         director.set_edit_prompt("")
