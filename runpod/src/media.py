@@ -1493,6 +1493,14 @@ def _usable_title(title: str, channel: str = "", aspect: float = 0.0, context: s
         from . import stormdesk
         if stormdesk.compilation_title(title or ""):
             return False                    # a montage of other people's footage (original sources only)
+        if _STORY_KIND["kind"] in ("news", "weather", "disaster") and channel:
+            # A news story: a headline in the re-upload desks' formula ("LAS VEGAS HIT by FLASH FLOODS — ...", a
+            # siren emoji) from an uploader that is not a station or an agency is a re-upload (the first proof
+            # run, 2026-11-03: a third of the per-line clips came from such desks).
+            from . import srcbank
+            if srcbank.desk_title(title or "") and stormdesk.source_kind(channel, title or "") not in (
+                    "station", "original"):
+                return False
     from . import offtopic, topics
     seen_as = f"{title or ''}|{channel or ''}".lower()
     if topics.off_topic_title(title or "", channel or "", line=context or ""):

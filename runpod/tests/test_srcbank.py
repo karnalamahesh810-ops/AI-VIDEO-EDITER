@@ -94,6 +94,18 @@ class OriginalsEveryStyle(unittest.TestCase):
         with mock.patch.object(config, "ORIGINALS_ONLY", False):
             self.assertTrue(media._usable_title("Flood compilation from Las Vegas", "Some Channel", 1.78))
 
+    def test_desk_headlines_out_of_news_stories(self):
+        t = "LAS VEGAS HIT by FLASH FLOODS — 10 RESCUES as Streets Turn to Rivers"
+        try:
+            with mock.patch.object(config, "ORIGINALS_ONLY", True):
+                media.set_story_kind("news")
+                self.assertFalse(media._usable_title(t, "Nexthera News", 1.78))
+                self.assertTrue(media._usable_title(t, "News 3 Las Vegas", 1.78))        # a station's own
+                media.set_story_kind("history")
+                self.assertTrue(media._usable_title(t, "Nexthera News", 1.78))
+        finally:
+            media.set_story_kind("")
+
     def test_description_credit_is_a_reupload_for_any_style(self):
         info = {"title": "Las Vegas flood", "channel": "Random Clips", "width": 1920, "height": 1080,
                 "description": "Video credit: KTNV. No copyright infringement intended."}
