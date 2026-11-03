@@ -179,6 +179,8 @@ STYLES: Dict[str, dict] = {
                    # Clips keep their own sound (natural sound plays quietly under the voice, src/clipaudio.py),
                    # one uploader at most ~7% of the runtime, phone Shorts of the event searched too.
                    "CLIP_AUDIO": True, "CHANNEL_MAX_SHARE": 0.07, "SHORTS_QUERIES": True,
+                   # The source bank (src/srcbank.py): one source at most ~7% of the runtime too.
+                   "SOURCE_BANK_SHARE": 0.07,
                    "LOUDNESS_TARGET_LUFS": -14.0},
     },
     "trending_news": {

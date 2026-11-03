@@ -171,10 +171,22 @@ def open_seconds(opts: Optional[dict]) -> float:
     return max(OPEN_MIN, min(OPEN_MAX, v))
 
 
+def _originals_only() -> bool:
+    try:
+        from . import config
+        return bool(getattr(config, "ORIGINALS_ONLY", False))
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def blocklist(inp: Optional[dict]) -> List[str]:
     """The channels this job never uses: the owner's list for the style (and channels named like a compilation
     desk, but never the customer's own channel), plus the job's own."""
     names = list(DEFAULT_BLOCKLIST) if is_style(inp) else []
+    if not names and _originals_only():
+        # Original sources for every style (config.ORIGINALS_ONLY, 2026-11-03): the owner's never-list, the known
+        # re-upload desks and every channel named like a compilation desk.
+        names = list(DEFAULT_BLOCKLIST) + [n for n in REUPLOADERS if n not in DEFAULT_BLOCKLIST]
     if names:
         names.append(AGGREGATORS)
         own = options(inp).get("channel_name") or (inp or {}).get("channel_title") or ""
@@ -327,6 +339,21 @@ _REUPLOAD_TEXT = re.compile(
 def reupload_text(description: str) -> bool:
     """An upload's description that says the footage is someone else's (a fair-use notice, a footage credit)."""
     return bool(_REUPLOAD_TEXT.search(str(description or "")[:3000]))
+
+
+# A montage of other people's videos by its title, in any niche (2026-11-03: original sources for every style):
+# "Top 10 ...", "... compilation", "best of ...", "most insane ... ever caught", "25 craziest moments".
+_COMPILATION_TITLE = re.compile(
+    r"\bcompilations?\b|\btop\s?\d{1,3}\b|\bbest of\b|\bmontage\b|\bmega ?mix\b|"
+    r"\bmost (?:shocking|insane|terrifying|dangerous|incredible|unbelievable|crazy|craziest|scary|scariest|"
+    r"epic|extreme|bizarre|amazing|satisfying)\b.{0,40}\b(?:ever|caught|recorded|on camera|moments|videos|clips)\b|"
+    r"\b\d{1,3}\s+(?:craziest|scariest|insane|incredible|shocking|unbelievable|terrifying|epic|amazing|crazy|"
+    r"bizarre|times|moments)\b.{0,30}\b(?:caught|camera|moments|videos|clips|ever)\b", re.I)
+
+
+def compilation_title(title: str) -> bool:
+    """An upload titled as a compilation of other people's footage (never a source of original footage)."""
+    return bool(_COMPILATION_TITLE.search(str(title or "")))
 
 
 def original_share(doc: dict) -> dict:
@@ -1259,8 +1286,15 @@ def _trim_head(scene: dict, frames_cut: int, fps: int) -> None:
 
 def _default_fetch(video: str, start: float, seconds: float, work: str) -> str:
     """A section of a YouTube video WITH its sound (the pause clip), three tries on the worker's routes."""
-    from . import ytdlp
+    from . import srcbank, ytdlp
     vid = video[3:] if video.startswith("yt:") else video
+    # A source the source bank downloaded whole (src/srcbank.py): cut from its file, sound and all - no download.
+    try:
+        local = srcbank.local_section(vid, start, seconds, work, audio=True)
+    except Exception:  # noqa: BLE001 - the download below
+        local = ""
+    if local:
+        return local
     for _ in range(3):
         try:
             path = ytdlp._yt_fetch(vid, work, start, seconds, audio=True)

@@ -771,6 +771,45 @@ POOL_RATE_PARALLEL = int(os.getenv("POOL_RATE_PARALLEL", "3"))
 # the per-scene search (pools.retry_failed).
 POOL_RETRY_MOMENTS = int(os.getenv("POOL_RETRY_MOMENTS", "2"))
 
+# --- the source bank (src/srcbank.py, 2026-11-03) --------------------------------
+# The owner's laptop method for every style: targeted searches, original sources only, each source downloaded
+# whole ONCE, scene-split and reviewed in one vision call on a sheet of its real frames, many distinct shots cut
+# from it by the narration. Runs before the subject pools; what it leaves goes to the pools and the per-line search.
+SOURCE_BANK = _flag("SOURCE_BANK", True)
+SOURCE_BANK_SECONDS = float(os.getenv("SOURCE_BANK_SECONDS", "900"))          # its whole time box
+SOURCE_BANK_MIN_LINES = int(os.getenv("SOURCE_BANK_MIN_LINES", "4"))
+SOURCE_BANK_MAX_SEARCHES = int(os.getenv("SOURCE_BANK_MAX_SEARCHES", "28"))
+SOURCE_BANK_TOPICS = int(os.getenv("SOURCE_BANK_TOPICS", "10"))
+SOURCE_BANK_LINE_QUERIES = int(os.getenv("SOURCE_BANK_LINE_QUERIES", "8"))
+SOURCE_BANK_SEARCH_PARALLEL = int(os.getenv("SOURCE_BANK_SEARCH_PARALLEL", "4"))
+SOURCE_BANK_MAX_SOURCES = int(os.getenv("SOURCE_BANK_MAX_SOURCES", "32"))
+SOURCE_BANK_MIN_SOURCES = int(os.getenv("SOURCE_BANK_MIN_SOURCES", "10"))       # ... else one per 3 lines
+SOURCE_BANK_MAX_MB = int(os.getenv("SOURCE_BANK_MAX_MB", "400"))                 # one source's download
+SOURCE_BANK_TAIL = int(os.getenv("SOURCE_BANK_TAIL", "40"))                      # fallback candidates a line
+SOURCE_BANK_PER_CHANNEL = int(os.getenv("SOURCE_BANK_PER_CHANNEL", "4"))
+SOURCE_BANK_MIN_SOURCE_SECONDS = float(os.getenv("SOURCE_BANK_MIN_SOURCE_SECONDS", "6"))
+SOURCE_BANK_MAX_SOURCE_SECONDS = float(os.getenv("SOURCE_BANK_MAX_SOURCE_SECONDS", "900"))
+SOURCE_BANK_1080_SECONDS = float(os.getenv("SOURCE_BANK_1080_SECONDS", "240"))  # longer sources come at 720p
+SOURCE_BANK_PARALLEL = int(os.getenv("SOURCE_BANK_PARALLEL", "4"))            # sources downloaded / reviewed at once
+SOURCE_BANK_SCENE = float(os.getenv("SOURCE_BANK_SCENE", "0.30"))
+SOURCE_BANK_PIECE_SECONDS = float(os.getenv("SOURCE_BANK_PIECE_SECONDS", "5.0"))
+SOURCE_BANK_MIN_SHOT = float(os.getenv("SOURCE_BANK_MIN_SHOT", "1.2"))
+SOURCE_BANK_MAX_PIECES = int(os.getenv("SOURCE_BANK_MAX_PIECES", "48"))
+SOURCE_BANK_CACHE = _flag("SOURCE_BANK_CACHE", True)                         # reviews on R2 bank/reviews/
+SOURCE_BANK_MODEL_MATCH = _flag("SOURCE_BANK_MODEL_MATCH", True)
+SOURCE_BANK_MATCH_BATCH = int(os.getenv("SOURCE_BANK_MATCH_BATCH", "50"))
+SOURCE_BANK_SHARE = float(os.getenv("SOURCE_BANK_SHARE", "0.08"))            # one source's share of the runtime
+SOURCE_BANK_MIN_CAP = float(os.getenv("SOURCE_BANK_MIN_CAP", "12"))           # ... never under this many seconds
+SOURCE_BANK_MOMENT_GAP = float(os.getenv("SOURCE_BANK_MOMENT_GAP", "1.0"))    # seconds between two moments of one source
+SOURCE_BANK_LOOKALIKE = float(os.getenv("SOURCE_BANK_LOOKALIKE", "0.95"))     # CLIP cosine = the same picture
+SOURCE_BANK_MIN_FIT = float(os.getenv("SOURCE_BANK_MIN_FIT", "0.45"))
+SOURCE_BANK_GAP_RELAX = float(os.getenv("SOURCE_BANK_GAP_RELAX", "1.5"))
+SOURCE_BANK_CUT_PARALLEL = int(os.getenv("SOURCE_BANK_CUT_PARALLEL", "6"))
+# Original sources only, for every style (the owner, 2026-11-03: re-upload / compilation channels can strike the
+# video): the known re-upload desks, compilation channels and titles, and uploads whose description credits someone
+# else's footage are never used. Off = only the storm desk style's blocklist, as before.
+ORIGINALS_ONLY = _flag("ORIGINALS_ONLY", True)
+
 # --- supabase storage --------------------------------------------------------
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_SERVICE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")

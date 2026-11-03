@@ -144,6 +144,13 @@ def _video_of(identity: str, url: str) -> str:
     return p.group(1) if p else ""
 
 
+def _end_from(moment: Any) -> Optional[float]:
+    end = moment.get("end") if isinstance(moment, dict) else None
+    if isinstance(end, (int, float)) and not isinstance(end, bool):
+        return float(end)
+    return None
+
+
 def _start_from(moment: Any, url: str, path: str) -> Optional[float]:
     if isinstance(moment, dict) and isinstance(moment.get("start"), (int, float)) \
             and not isinstance(moment.get("start"), bool):
@@ -185,6 +192,8 @@ class Shot:
     start: Optional[float] = None       # where in that video
     at: Optional[float] = None          # where on the timeline
     chain: bool = False                 # the planned next moment of the line before's clip
+    end: Optional[float] = None         # where that moment ends in the video, when known (a source bank shot)
+    bank: bool = False                  # a source bank shot (src/srcbank.py): repeats judged on its exact range
 
     @classmethod
     def of_asset(cls, a, at: Optional[float] = None) -> "Shot":
@@ -194,7 +203,9 @@ class Shot:
         video = _video_of(ident, url) if getattr(a, "kind", "") == "video" else ""
         return cls(ident="" if video else ident, files=tuple(_files_of(path, url)), video=video,
                    start=_start_from(moment, url, path) if video else None, at=at,
-                   chain=bool(isinstance(moment, dict) and moment.get("chain")))
+                   chain=bool(isinstance(moment, dict) and moment.get("chain")),
+                   end=_end_from(moment) if video else None,
+                   bank=bool(isinstance(moment, dict) and moment.get("bank")))
 
     @classmethod
     def of_scene(cls, scene: dict, fps: int) -> Optional["Shot"]:
@@ -221,7 +232,8 @@ class Shot:
         moment = sem.get("moment") if isinstance(sem.get("moment"), dict) else {}
         return cls(ident="" if video else ident, files=tuple(_files_of(m.get("url") or "")), video=video,
                    start=_start_from(moment, src, m.get("url") or "") if video else None,
-                   at=int(scene.get("startFrame") or 0) / max(1, fps), chain=bool(moment.get("chain")))
+                   at=int(scene.get("startFrame") or 0) / max(1, fps), chain=bool(moment.get("chain")),
+                   end=_end_from(moment) if video else None, bank=bool(moment.get("bank")))
 
 
 class Used:
@@ -274,7 +286,16 @@ class Used:
                     continue            # a planned chain: the next moment of the clip before it
                 if near:
                     return "the same source video on the next scene"
-                if shot.start is None or o.start is None or abs(shot.start - o.start) < self.gap:
+                if shot.start is None or o.start is None:
+                    return "the same moment of its source video"
+                if (shot.bank or o.bank) and shot.end is not None and o.end is not None:
+                    # Source bank shots (src/srcbank.py): distinct cuts of a source reviewed whole - the same
+                    # moment only when their ranges overlap or nearly touch.
+                    g = float(getattr(config, "SOURCE_BANK_MOMENT_GAP", 1.0))
+                    if shot.start < o.end + g and o.start < shot.end + g:
+                        return "the same moment of its source video"
+                    continue
+                if abs(shot.start - o.start) < self.gap:
                     return "the same moment of its source video"
         return ""
 

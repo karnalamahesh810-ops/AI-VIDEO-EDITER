@@ -100,6 +100,7 @@ from src import ambience, gapfill, grade, packs, quality, review, shotcap, voice
 from src import brandkit, clipfx, stockblock
 from src import recut, reclip, relook, restore
 from src import topics
+from src import srcbank
 from src import spares
 from src import severe
 from src import stormdesk
@@ -1181,6 +1182,18 @@ def _narration_fields(doc: dict) -> dict:
     return {"narration": meta["narration"], **({"audio_url": src} if src.startswith("http") else {})}
 
 
+def _bank_story_line(title: str, brief: Optional[dict]) -> str:
+    """What the source bank's review and matching calls are told the video is about (one line)."""
+    b = brief or {}
+    parts = [str(title or "").strip(), str(b.get("event") or "").strip(), str(b.get("summary") or "").strip()[:200]]
+    places = b.get("places") or []
+    if isinstance(places, list) and places:
+        parts.append("Places: " + ", ".join(str(p) for p in places[:6]))
+    if b.get("year"):
+        parts.append(f"Year: {b['year']}")
+    return " | ".join(p for p in parts if p)[:400]
+
+
 def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     gputools.reset()                           # this job's GPU tools stats, retimed clips and music bed
     # The channels this job never uses (src/stormdesk.blocklist: the storm desk style's own list and the job's
@@ -1535,6 +1548,21 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     # and left out of every search below.
     packed = packs.first_pass(search_jobs, work, require_cc=require_cc) if config.PACKS_FIRST else {}
     open_jobs = [j for j in search_jobs if j["index"] not in packed] if packed else search_jobs
+    # The source bank (src/srcbank.py, SOURCE_BANK): the owner's laptop method first - targeted searches,
+    # original sources only, each downloaded whole once, scene-split and reviewed in one vision call, many
+    # distinct shots cut from it by the narration. The lines it fills leave every search below.
+    banked: dict = {}
+    if srcbank.enabled() and inp.get("allow_youtube") is not False and not require_cc and open_jobs:
+        report("Finding and reviewing whole sources", 22, done=0, total=len(open_jobs))
+        banked = srcbank.fill(open_jobs, work, require_cc=require_cc, report=report,
+                              story_line=_bank_story_line(title, brief))
+        if banked:
+            open_jobs = [j for j in open_jobs if j["index"] not in banked]
+            if not fanned:
+                # The lines left get the search time their own count earns, from now (the bank's minutes were
+                # its own, not theirs).
+                _ytdlp_mod.set_deadline(time.time() + fanout.single_machine_deadline(max(1, len(open_jobs))))
+        print(f"[worker] source bank filled {len(banked)} line(s): {json.dumps(srcbank.stats())[:600]}", flush=True)
     pools_wanted = bool(config.SUBJECT_POOLS and inp.get("allow_youtube") is not False)
     in_parts = bool(pools_wanted and config.POOLS_IN_PARTS and open_jobs
                     and fanout.enabled_for(len(open_jobs), project_id))
@@ -1543,14 +1571,18 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         pooled = pools.source_by_subject(open_jobs, work, require_cc=require_cc, report=report, library=lib)
         print(f"[worker] subject pools covered {len(pooled)}/{len(open_jobs)} lines", flush=True)
     pool_stats = dict(media.LAST_STATS.get("pools") or {}, covered_lines=len(pooled))
+    if srcbank.enabled():
+        pool_stats["bank"] = srcbank.stats()
     if packed:
         pool_stats["packs_first"] = len(packed)
     if restored:
         pool_stats["resumed"] = len(restored)
     taken = ({a.identity for a in pooled.values()} | pools.video_ids(pooled) | {a.identity for a in packed.values()}
-             | {a.identity for a in restored.values()} | pools.video_ids(restored))
+             | {a.identity for a in restored.values()} | pools.video_ids(restored)
+             | {a.identity for a in banked.values()} | {f"yt:{v}" for v in srcbank.ids()})
     rest = [j for j in open_jobs if j["index"] not in pooled]
-    assets = [pooled.get(j["index"]) or packed.get(j["index"]) or restored.get(j["index"]) for j in jobs]
+    assets = [banked.get(j["index"]) or pooled.get(j["index"]) or packed.get(j["index"]) or restored.get(j["index"])
+              for j in jobs]
     # The account ran dry (or the key was refused, or the AI went quiet) during the subject pools: keep what was
     # found for the Retry and stop here (src/aiguard.py, src/resume.py).
     _ai_checkpoint("the subject pools", assets)
@@ -1681,6 +1713,20 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     # search - in its own short time box (src/gapfill.py). What it cannot
     # fill gets the planner's graphic or the neighbouring shot held over it
     # once the timeline is built.
+    # Still empty: the source bank's unused approved shots (other moments of sources already reviewed whole)
+    # before the ladder's pictures, holds and cards (src/srcbank.py fill_gaps).
+    if srcbank.enabled() and any(results_by_index[j["index"]] is None for j in fill_jobs):
+        try:
+            extra = srcbank.fill_gaps(fill_jobs, results_by_index, work)
+        except Exception as e:  # noqa: BLE001 - the ladder below
+            print(f"[worker] source bank gap fill skipped: {type(e).__name__}: {str(e)[:120]}", flush=True)
+            extra = {}
+        for i, a in extra.items():
+            results_by_index[i] = a
+        if extra:
+            pool_stats["bankGaps"] = len(extra)
+            print(f"[worker] source bank filled {len(extra)} empty line(s) with unused reviewed shots", flush=True)
+        pool_stats["bank"] = srcbank.stats()
     fallback: dict = {}
     if any(results_by_index[j["index"]] is None for j in fill_jobs):
         if config.NO_REUSE:
@@ -3346,7 +3392,13 @@ CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "ANIMATION_FILL", "GAMEPLAY_FOOTAGE", "J
                       # one round; the machine sizing (src/machine.py) - each A/B'd on one job.
                       "SOURCE_PARTS", "SOURCE_PART_ROUNDS", "DOWNLOAD_THREADS", "SOURCE_WORKERS_PER_CPU",
                       "MACHINE_SAMPLE", "PASS2_SKIP_EXHAUSTED",
-                      "DOWNLOAD_TIDY_FAST", "DOWNLOAD_TIDY_PRESET", "DOWNLOAD_TIDY_CRF")
+                      "DOWNLOAD_TIDY_FAST", "DOWNLOAD_TIDY_PRESET", "DOWNLOAD_TIDY_CRF",
+                      # The source bank and original sources for every style (src/srcbank.py, 2026-11-03): one job
+                      # can switch either off ({"SOURCE_BANK": false}) for an A/B, or tune the bank's sizes.
+                      "SOURCE_BANK", "ORIGINALS_ONLY", "SOURCE_BANK_SECONDS", "SOURCE_BANK_MAX_SEARCHES",
+                      "SOURCE_BANK_MAX_SOURCES", "SOURCE_BANK_MIN_SOURCES", "SOURCE_BANK_PER_CHANNEL",
+                      "SOURCE_BANK_SHARE", "SOURCE_BANK_MIN_FIT", "SOURCE_BANK_LOOKALIKE", "SOURCE_BANK_CACHE",
+                      "SOURCE_BANK_MODEL_MATCH", "SOURCE_BANK_MAX_SOURCE_SECONDS", "SOURCE_BANK_PARALLEL")
 
 
 def _apply_config(overrides) -> dict:
@@ -3713,6 +3765,7 @@ def handler(job):
     director.set_edit_prompt(inp.get("edit_prompt"))
     spares.reset()                      # and the footage this job downloaded and kept for its empty lines
     pools.reset()                       # and the spare pool moments it may draw on
+    srcbank.reset()                     # and the sources the source bank reviewed
     shotcap.reset()                     # and what the shot cap cut and swapped
     hookcheck.reset()                   # and the hook check's vision calls
     packs.reset()                       # and the niches its footage packs are read for

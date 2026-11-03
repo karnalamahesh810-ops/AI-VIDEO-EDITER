@@ -43,3 +43,8 @@ os.environ.setdefault("VISION_API_BASE", "https://vision.invalid/v1")
 # for the balance. Off here; tests/test_cost_quality_2026_10_07.py sets its own floor around a mocked balance.
 os.environ.setdefault("OPENROUTER_MIN_CREDIT", "0")
 os.environ.setdefault("OPENROUTER_MIN_CREDIT_SMALL", "0")
+# The source bank (src/srcbank.py) searches and downloads whole sources before the pools: an unmocked sourcing test
+# would reach YouTube. Off here, and the re-upload gate for every style (ORIGINALS_ONLY) too, so the suite keeps
+# asserting the behaviour it was written for; tests/test_srcbank.py switches both on around its own stubs.
+os.environ.setdefault("SOURCE_BANK", "0")
+os.environ.setdefault("ORIGINALS_ONLY", "0")

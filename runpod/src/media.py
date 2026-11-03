@@ -1489,6 +1489,10 @@ def _usable_title(title: str, channel: str = "", aspect: float = 0.0, context: s
         return False
     if blocked_channel(title or "", channel or ""):
         return False                        # a channel the job's blocklist names (the owner's: never)
+    if getattr(config, "ORIGINALS_ONLY", False):
+        from . import stormdesk
+        if stormdesk.compilation_title(title or ""):
+            return False                    # a montage of other people's footage (original sources only)
     from . import offtopic, topics
     seen_as = f"{title or ''}|{channel or ''}".lower()
     if topics.off_topic_title(title or "", channel or "", line=context or ""):
@@ -3617,9 +3621,11 @@ def meta_reject(info: Optional[dict], title: str = "", context: str = "", need: 
     bl = blocked_channel(str(info.get("title") or ""), str(info.get("channel") or info.get("uploader") or ""))
     if bl:
         return f"a blocked source ({bl})"
-    if getattr(config, "FIELD_FOOTAGE_ONLY", False) and BLOCKED_CHANNELS:
-        # Original footage only (the storm desk style): an upload whose description credits someone else's footage
-        # (a fair-use notice, "video credit: ...") is a re-upload, whatever its channel is called.
+    originals = getattr(config, "FIELD_FOOTAGE_ONLY", False) or getattr(config, "ORIGINALS_ONLY", False)
+    if originals and BLOCKED_CHANNELS:
+        # Original footage only (the storm desk style, and every style with ORIGINALS_ONLY): an upload whose
+        # description credits someone else's footage (a fair-use notice, "video credit: ...") is a re-upload,
+        # whatever its channel is called.
         from . import stormdesk
         if stormdesk.reupload_text(str(info.get("description") or "")):
             return "a re-upload (its description credits someone else's footage)"
@@ -6226,7 +6232,11 @@ def variety_violations(jobs: List[Dict[str, Any]], results) -> Dict[int, tuple]:
         if a.identity in shots:
             out[i] = ("the same shot again", "soft")
             continue
-        if not may_place(prev, starts.get(i)):
+        # A source bank shot (src/srcbank.py) is one of many distinct moments cut from a source reviewed whole:
+        # the bank keeps its own rules (no moment twice, never two lines in a row, the share caps), so the
+        # per-line search's "two moments a video, two minutes apart" does not apply to it.
+        bank = isinstance(a.moment, dict) and bool(a.moment.get("bank"))
+        if not bank and not may_place(prev, starts.get(i)):
             cap = config.MAX_MOMENTS_PER_VIDEO
             out[i] = ((f"its video already supplies {len(prev)} scenes" if 0 < cap <= len(prev)
                        else f"its video plays within {config.SAME_VIDEO_GAP_SECONDS:.0f} s"), "soft")
