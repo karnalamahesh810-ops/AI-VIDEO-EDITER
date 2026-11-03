@@ -197,6 +197,8 @@ class Caps(_On):
             src_cap, chan_cap = srcbank._cap_seconds(600.0)
         self.assertAlmostEqual(src_cap, 42.0)
         self.assertAlmostEqual(chan_cap, 96.0)
+        with mock.patch.object(config, "SOURCE_BANK_SHARE", 0.07):
+            self.assertAlmostEqual(srcbank._cap_seconds(120.0)[1], 24.0)    # a short video: two sources' worth
 
     def test_relaxed_pass_for_an_event_story(self):
         work = tempfile.mkdtemp()

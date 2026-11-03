@@ -972,7 +972,9 @@ def _cap_seconds(total: float) -> Tuple[float, float]:
     share = float(getattr(config, "SOURCE_BANK_SHARE", 0.08))
     src_cap = max(float(getattr(config, "SOURCE_BANK_MIN_CAP", 12.0)), share * total)
     chan_share = float(getattr(config, "SOURCE_BANK_CHANNEL_SHARE", 0.16))
-    return src_cap, max(src_cap, chan_share * total)
+    # A short video still lets one channel give two sources' worth (proof run 2, 2 minutes: a 19 s channel cap left
+    # 81 of 92 approved shots unused with only four original channels found).
+    return src_cap, max(2.0 * src_cap, chan_share * total)
 
 
 def _window(p: Piece, need: float, used: List[Tuple[float, float]]) -> Optional[Tuple[float, float]]:
