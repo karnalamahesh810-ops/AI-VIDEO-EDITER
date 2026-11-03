@@ -229,6 +229,119 @@ _STATION = re.compile(r"\d|\bnews\b|\btv\b|\babc\b|\bnbc\b|\bcbs\b|\bfox\b|\bcha
 _CALL = re.compile(r"(?<![A-Za-z])([KW][A-Z]{2,3})(?:-?(?:TV|DT|HD|CD|LD))?(?:\s?\d{1,2})?(?![A-Za-z])")
 
 
+# --------------------------------------------------------------------------- #
+# Original sources only (the owner, 2026-11-03: "no footage from competitors at all")
+# --------------------------------------------------------------------------- #
+#
+# The owner's Las Vegas video took ~70% of its shots from re-upload / compilation channels: they can strike the
+# video and it hands them the advantage. Original creators are fine: local TV stations, agencies, the person who
+# filmed it. source_kind() sorts a channel; "reupload" never plays in a storm desk video.
+
+# Seen re-uploading other people's footage (the owner's list, 2026-11-03) - names that the generic rule below
+# would not catch on their own are the point of this list.
+REUPLOADERS = (
+    "TERRA DOSSIER", "Weather Is Dangerous", "FM Weather", "Storm-HQ", "Real Weather US", "STORM GLOBAL",
+    "Disastrrz", "Last Traces", "USA Severe Weather", "USA Wildfire Alert", "Storm Desk USA", "Global Weather Network",
+    "GLOBAL WEATHER NEWS", "Weather Disasters", "Disaster Wire", "weather Storm Report", "Global Storm Desk",
+    "Beyond The Seen", "IDH Weather News", "StormWatch America", "Hydro-Tech Vision", "Stormfield News",
+    "ARTEMIS HOUSE", "USA Climate Reports", "The Why On Earth", "NationalStormReport", "Daily Weather Report",
+    "Extreme Weather Report", "Final Remnants", "The Daily Atlas", "Planet Weather", "StormPulse HQ",
+    "Weather Impact USA", "Crisis Radar", "GeoVara", "Foreshock", "Dddd Dd", "The Mercer Report",
+    "Weather Alert Wire", "American Weather System", "The Earth Desk", "EARTH ALERT NEWS", "Weather Watch USA",
+    "SEVERE WEATHER NEWS")
+# Original footage by its owner's name: weather networks that shoot and license their own, storm-chaser outfits,
+# agencies and services.
+_ORIGINAL_NAMES = re.compile(
+    r"\b(the weather channel|weathernation|weather nation|accuweather|fox weather|live storms media|"
+    r"storm chas\w*|chas(?:er|ers|ing)\b|reed timmer|pecos hank|ryan hall|max velocity|severe studios|"
+    r"nws|noaa|national weather service|usgs|fema|nasa|national park service|nps|usfs|forest service|cal ?fire|"
+    r"fire (?:department|dept|district|rescue)|police|sheriff|county|city of|state of|department of|dept\.? of|"
+    r"bureau of|water authority|emergency management|highway patrol|\bdot\b|national guard|coast guard|red cross|"
+    r"associated press|reuters|afp|getty|storyful|viralhog|newsflare|jukin|cbs news|nbc news|abc news|cnn|"
+    r"bbc|pbs|npr|univision|telemundo)\b", re.I)
+# The words re-upload desks are named with; a name made mostly of them, with a weather / disaster word, is one.
+_DESK_WORDS = set("""
+weather storm storms stormwatch disaster disasters climate crisis severe extreme tornado tornadoes hurricane
+flood floods flooding wildfire wildfires earth planet global world usa us america american national daily
+breaking news report reports alert alerts desk hq wire radar pulse impact watch tracker hub network dossier
+atlas remnants traces chronicle chronicles files insider today now live center centre update updates zone
+""".split())
+_CORE_WORDS = ("weather", "storm", "disaster", "climate", "crisis", "severe", "extreme", "tornado", "hurricane",
+               "flood", "wildfire", "earth", "planet", "catastroph")
+
+
+def _name_words(name: str) -> List[str]:
+    n = re.sub(r"([a-z])([A-Z])", r"\1 \2", str(name or ""))          # NationalStormReport -> National Storm Report
+    return [w for w in re.split(r"[^a-z0-9]+", n.lower()) if w and w not in ("the", "a", "of", "and", "on", "in")]
+
+
+def is_station(channel: str) -> bool:
+    """A local TV station by its name: a call sign, a channel number, a network name or "news" + a place."""
+    c = str(channel or "")
+    if _CALL.search(c) and _STATION.search(c):
+        return True
+    if re.search(r"\b(abc|nbc|cbs|fox|cw|pbs|univision|telemundo)\s?\d{1,2}\b|\b\d{1,2}\s?(news|abc|nbc|cbs|fox)\b|"
+                 r"\bnews\s?\d{1,2}\b|\bchannel\s?\d{1,2}\b|'s family\b", c, re.I):
+        return True
+    return bool(re.search(r"\bnews\b", c, re.I) and _places_named(c))
+
+
+def source_kind(channel: str, title: str = "", description: str = "") -> str:
+    """
+    "station" (a local TV station), "original" (an agency, a weather network or storm-chaser outfit that shoots
+    its own), "reupload" (a compilation / re-upload desk: the owner's list, a name made of desk words, or an upload
+    whose description says it is someone else's footage), "creator" (anyone else - the person who filmed it), or
+    "unknown" (no channel known yet: resolve it before use).
+    """
+    ch = re.sub(r"\s+", " ", str(channel or "")).strip()
+    if not ch or ch.lower() in ("youtube", "unknown", "source"):
+        return "unknown"
+    key = _norm_name(ch)
+    for n in REUPLOADERS:
+        k = _norm_name(n)
+        if k and (key == k or (len(k) >= 8 and k in key)):
+            return "reupload"
+    if is_station(ch):
+        return "station"
+    if _ORIGINAL_NAMES.search(ch):
+        return "original"
+    words = _name_words(ch)
+    if words and any(any(c in w for c in _CORE_WORDS) for w in words):
+        desk = sum(1 for w in words if w in _DESK_WORDS or any(c in w for c in _CORE_WORDS))
+        if desk / float(len(words)) >= 0.5 and len(words) >= 2 or (len(words) == 1 and len(words[0]) > 12):
+            return "reupload"
+    if reupload_text(description):
+        return "reupload"
+    return "creator"
+
+
+_REUPLOAD_TEXT = re.compile(
+    r"copyright disclaimer|section 107|fair use|all rights (?:go |belong )?to (?:their|the) (?:respective )?owners?|"
+    r"no copyright infringement intended|credits? to the (?:original|respective)|footage (?:courtesy|credit|from)|"
+    r"video credit|(?:source|sources|credits?)\s*:\s*\S+.*(?:news|tv|youtube|tiktok|x\.com|twitter)|"
+    r"compilation of|we do not own", re.I)
+
+
+def reupload_text(description: str) -> bool:
+    """An upload's description that says the footage is someone else's (a fair-use notice, a footage credit)."""
+    return bool(_REUPLOAD_TEXT.search(str(description or "")[:3000]))
+
+
+def original_share(doc: dict) -> dict:
+    """Seconds of the narration shots by source kind and the share from original sources (stations, agencies,
+    the people who filmed it), for the report."""
+    fps = int(doc.get("fps") or 30)
+    secs: Dict[str, float] = {}
+    for s in doc.get("scenes") or []:
+        if (s.get("media") or {}).get("type") not in ("video", "image") or is_ai(s):
+            continue
+        k = source_kind(_sm(s).get("channel") or "")
+        secs[k] = secs.get(k, 0.0) + int(s["durationInFrames"]) / float(fps)
+    total = sum(secs.values()) or 1.0
+    orig = sum(v for k, v in secs.items() if k in ("station", "original", "creator"))
+    return {"seconds": {k: round(v, 1) for k, v in secs.items()}, "originalShare": round(orig / total, 3)}
+
+
 def _places_named(text: str) -> set:
     low = f" {str(text or '').lower()} "
     out = set()
@@ -296,8 +409,9 @@ def blocked(channel: str, title: str, names: Sequence[str]) -> str:
         k = _norm_name(n)
         if k and (k == ch or (len(k) >= 8 and (k in ch or k in ti))):
             return n
-    if AGGREGATORS in names and channel and _AGGREGATOR.match(re.sub(r"\s+", " ", str(channel)).strip()):
-        return "a news-compilation channel"
+    if AGGREGATORS in names and channel and (_AGGREGATOR.match(re.sub(r"\s+", " ", str(channel)).strip())
+                                            or source_kind(channel) == "reupload"):
+        return "a news-compilation / re-upload channel"
     return ""
 
 
@@ -1463,6 +1577,15 @@ def stills_to_replace(doc: dict, opening: float = NO_AI_SECONDS,
         elif int(s["startFrame"]) < opening * fps:
             out.append((i, "a picture in the opening"))
         seen.add(k)
+    for i, s in enumerate(sc):
+        if s.get("natSound") or i in {j for j, _ in out} or (s.get("media") or {}).get("type") != "video" \
+                or is_ai(s) or not video_id(s).startswith("yt:"):
+            continue
+        kind = source_kind(_sm(s).get("channel") or "")
+        if kind == "reupload":
+            out.append((i, "a re-uploader's footage"))
+        elif kind == "unknown":
+            out.append((i, "an unknown source"))
     taken = {i for i, _ in out}
     photos = [i for i, s in enumerate(sc) if is_photo(s) and i not in taken]
     cap = int(share * max(1, len(sc)))
@@ -1487,9 +1610,120 @@ def _spare_take(entry: dict) -> bool:
         return False
 
 
+def _yt_meta(vid: str) -> dict:
+    """A YouTube video's metadata (channel, upload_date, title, description) from the worker's cached reader."""
+    try:
+        from . import media
+        got = media._yt_info(vid[3:] if vid.startswith("yt:") else vid)
+        info = got[0] if isinstance(got, tuple) else got
+        return info if isinstance(info, dict) else {}
+    except Exception:  # noqa: BLE001 - unknown stays unknown
+        return {}
+
+
+def resolve_channels(doc: dict, info: Optional[Callable[[str], dict]] = None) -> int:
+    """Every YouTube shot whose uploader is not known yet ("VIDEO: YouTube" on screen) gets it from the video's
+    metadata, with its upload day. Returns how many were resolved."""
+    info = info or _yt_meta
+    todo: Dict[str, List[dict]] = {}
+    for s in doc.get("scenes") or []:
+        v = video_id(s)
+        if v.startswith("yt:") and not str(_sm(s).get("channel") or "").strip() and not is_ai(s):
+            todo.setdefault(v, []).append(s)
+    if not todo:
+        return 0
+    with ThreadPoolExecutor(4) as ex:
+        got = dict(zip(todo, ex.map(lambda v: info(v) or {}, list(todo))))
+    n = 0
+    for v, shots in todo.items():
+        meta = got.get(v) or {}
+        ch = str(meta.get("channel") or meta.get("uploader") or "").strip()
+        if not ch:
+            continue
+        for s in shots:
+            sm = s.setdefault("semanticMetadata", {})
+            sm["channel"] = ch[:80]
+            up = str(meta.get("upload_date") or "")
+            if re.fullmatch(r"\d{8}", up):
+                sm["uploadDate"] = up
+            if meta.get("description") and reupload_text(str(meta.get("description"))):
+                sm["reupload"] = True
+            n += 1
+    return n
+
+
+def _reuse_original(doc: dict, i: int, used: Dict[str, List[float]], gap: float) -> bool:
+    """Scene i from an original clip already in the video: the part of its file the video does not show (after
+    or before the shot's own stretch, never overlapping it), from a source that is not the shot before's or
+    after's. Repeat-safe: a different moment of an original source."""
+    fps = int(doc.get("fps") or 30)
+    sc = doc["scenes"]
+    secs = int(sc[i]["durationInFrames"]) / float(fps)
+    near = {source_key(sc[j]) for j in (i - 1, i + 1) if 0 <= j < len(sc)}
+    for j, d in enumerate(sc):
+        m = d.get("media") or {}
+        if j == i or d.get("natSound") or m.get("type") != "video" or is_ai(d) or not _local(d):
+            continue
+        if source_kind(_sm(d).get("channel") or "") not in ("station", "original", "creator"):
+            continue
+        if source_key(d) in near:
+            continue
+        cs = m.get("clipSeconds")
+        if not isinstance(cs, (int, float)):
+            continue
+        t0 = float(m.get("trimStart") or 0.0)
+        t1 = t0 + int(d["durationInFrames"]) / float(fps)
+        others = [x for x in sc if x is not d and (x.get("media") or {}).get("url") == m.get("url")]
+        spans = [(float((x.get("media") or {}).get("trimStart") or 0.0),
+                  float((x.get("media") or {}).get("trimStart") or 0.0) + int(x["durationInFrames"]) / float(fps))
+                 for x in others] + [(t0, t1)]
+        for at in (t1 + 0.3, t0 - 0.3 - secs):
+            if at < 0 or at + secs > float(cs) - 0.05:
+                continue
+            if any(not (at + secs <= a - 0.2 or at >= b + 0.2) for a, b in spans):
+                continue
+            new = json.loads(json.dumps(m))
+            new["trimStart"] = round(at, 3)
+            sc[i]["media"] = new
+            smd = dict(_sm(d))
+            mo = smd.get("moment") if isinstance(smd.get("moment"), dict) else {}
+            base = float(mo.get("start") or 0.0) - t0 if isinstance(mo.get("start"), (int, float)) else None
+            if base is not None:
+                smd["moment"] = {"start": round(base + at, 2)}
+            smd["replacedStill"] = "another moment of an original clip"
+            sc[i]["semanticMetadata"] = {**_sm(sc[i]), **smd}
+            sc[i]["visualType"] = "footage"
+            sc[i]["motion"] = "none"
+            sc[i].pop("reviewRequired", None)
+            return True
+    return False
+
+
+def _hold_previous(doc: dict, i: int) -> bool:
+    """The last resort for a shot with nothing to show: the shot before it holds longer over its words (its
+    clip has the room). A longer real shot beats a re-upload or an empty frame (the owner)."""
+    fps = int(doc.get("fps") or 30)
+    sc = doc["scenes"]
+    if i == 0:
+        return False
+    prev, cur = sc[i - 1], sc[i]
+    if prev.get("natSound") or (prev.get("media") or {}).get("type") != "video" or \
+            source_kind(_sm(prev).get("channel") or "") not in ("station", "original", "creator"):
+        return False
+    if _clip_room(prev, fps) < (int(prev["durationInFrames"]) + int(cur["durationInFrames"])) / float(fps) - 0.05:
+        return False
+    prev["durationInFrames"] = int(prev["durationInFrames"]) + int(cur["durationInFrames"])
+    prev["words"] = list(prev.get("words") or []) + list(cur.get("words") or [])
+    prev["text"] = (str(prev.get("text") or "") + " " + str(cur.get("text") or "")).strip()
+    prev["heldOver"] = True
+    del sc[i]
+    return True
+
+
 def replace_stills(doc: dict, pool: Optional[Callable[[dict], List[dict]]] = None,
                    take: Optional[Callable[[dict], bool]] = None,
-                   check: Optional[Callable[[str], str]] = None) -> dict:
+                   check: Optional[Callable[[str], str]] = None,
+                   info: Optional[Callable[[str], dict]] = None) -> dict:
     """
     Real clips for the shots stills_to_replace names, from the job's spare bank (src/spares.py: footage this job
     already downloaded and the judge passed, not shown anywhere): the best word match whose source is not the
@@ -1506,6 +1740,8 @@ def replace_stills(doc: dict, pool: Optional[Callable[[dict], List[dict]]] = Non
         mo = moment(s, fps)
         if mo:
             used.setdefault(mo[0], []).append(mo[1])
+    resolved = resolve_channels(doc, info)
+    info = info or _yt_meta
     done, moved, left = 0, 0, []
     for i, why in stills_to_replace(doc):
         s = sc[i]
@@ -1526,10 +1762,15 @@ def replace_stills(doc: dict, pool: Optional[Callable[[dict], List[dict]]] = Non
             room = _probe(path).get("duration") or 0.0
             if room < secs - 0.05:
                 continue
+            meta = info(vid) or {}
+            ch = str(meta.get("channel") or meta.get("uploader") or e.get("channel") or "")
+            if source_kind(ch, "", str(meta.get("description") or "")) not in ("station", "original", "creator"):
+                continue                                # a spare from a re-uploader or of no known source
             if check is not None and check(path):
                 continue
             if not take(e):
                 continue
+            e = dict(e, channel=ch, upload_date=str(meta.get("upload_date") or ""))
             got = (e, vid, room)
             break
         if got is None:
@@ -1539,7 +1780,11 @@ def replace_stills(doc: dict, pool: Optional[Callable[[dict], List[dict]]] = Non
         start = float(e.get("start") or 0.0)
         s["media"] = {"type": "video", "url": e["path"], "source": "youtube",
                       "attribution": f"YouTube: {e.get('title') or ''}"[:300], "clipSeconds": round(room, 3)}
-        s["semanticMetadata"] = {**{k: v for k, v in sm.items() if k not in ("channel", "uploadDate", "pageUrl")},
+        s["semanticMetadata"] = {**{k: v for k, v in sm.items()
+                                    if k not in ("channel", "uploadDate", "pageUrl", "reupload")},
+                                 **({"channel": e["channel"][:80]} if e.get("channel") else {}),
+                                 **({"uploadDate": e["upload_date"]} if re.fullmatch(r"\d{8}", e.get("upload_date") or "")
+                                    else {}),
                                  "sourceUrl": f"https://www.youtube.com/watch?v={vid[3:]}&t={int(start)}",
                                  "moment": {"start": round(start, 2)}, "assetId": f"{vid}@{int(start)}",
                                  "contentDescription": str(e.get("description") or "")[:300],
@@ -1549,6 +1794,14 @@ def replace_stills(doc: dict, pool: Optional[Callable[[dict], List[dict]]] = Non
         s.pop("reviewRequired", None)
         used.setdefault(vid, []).append(start)
         done += 1
+    # Nothing in the bank: another moment of an original clip the video already uses.
+    left2 = []
+    for i, why in left:
+        if why != "a picture in the opening" and _reuse_original(doc, i, used, gap):
+            done += 1
+        else:
+            left2.append((i, why))
+    left = left2
     # A picture still in the opening: trades places with a real clip later on.
     still_left = []
     for i, why in left:
@@ -1567,7 +1820,16 @@ def replace_stills(doc: dict, pool: Optional[Callable[[dict], List[dict]]] = Non
                 still_left.append((i, why))
             continue
         still_left.append((i, why))
-    return {"replaced": done, "moved": moved, "left": still_left}
+    # Still nothing for an empty shot or a re-upload: the shot before holds longer (from the end, so the indexes
+    # still to come stay right). Pictures past the share stay (a real photo beats an empty frame).
+    held, final_left = 0, []
+    for i, why in sorted(still_left, key=lambda t: -t[0]):
+        if why in ("empty", "a re-uploader's footage", "an unknown source") and _hold_previous(doc, i):
+            held += 1
+        else:
+            final_left.append((i, why))
+    return {"replaced": done, "moved": moved, "held": held, "resolved": resolved,
+            "left": sorted(final_left)}
 
 
 def shares(doc: dict) -> List[dict]:
@@ -1787,6 +2049,7 @@ def finish(doc: dict, inp: dict, brief: Optional[dict] = None, work: str = "", f
     st = step("stills", lambda: replace_stills(doc, check=check)) or {}
     rep["stillsReplaced"], rep["stillsMoved"] = st.get("replaced", 0), st.get("moved", 0)
     rep["stillsLeft"] = [{"shot": i, "why": w} for i, w in (st.get("left") or [])][:40]
+    rep["heldOver"], rep["channelsResolved"] = st.get("held", 0), st.get("resolved", 0)
     rep["shotsCut"] = step("shot cap", lambda: cap_shots(doc)) or 0
     moved = step("ai opening", lambda: keep_ai_out_of_opening(doc)) or (0, 0)
     rep["aiMovedOutOfOpening"], rep["aiInOpening"] = moved
@@ -1943,6 +2206,8 @@ def finish(doc: dict, inp: dict, brief: Optional[dict] = None, work: str = "", f
     # The checks, as the video stands.
     rep["repeats"] = repeats(doc)
     rep["sources"] = shares(doc)[:30]
+    rep["origin"] = original_share(doc)
+    rep["emptyShots"] = sum(1 for s in doc["scenes"] if is_empty(s) and not s.get("natSound"))
     over = [r for r in rep["sources"] if r["share"] > SOURCE_CAP_SHARE + 0.005]
     rep["sourcesOverCap"] = over
     longest = max((int(s["durationInFrames"]) / fps for s in doc["scenes"]
@@ -1967,6 +2232,10 @@ def finish(doc: dict, inp: dict, brief: Optional[dict] = None, work: str = "", f
         issues.append(f"{rep['aiInOpening']} AI shot(s) in the first minute")
     if longest > SHOT_MAX + 0.05:
         issues.append(f"longest shot {longest:.1f} s")
+    if rep["origin"]["seconds"].get("reupload"):
+        issues.append(f"{rep['origin']['seconds']['reupload']:.0f} s from re-upload channels")
+    if rep["emptyShots"]:
+        issues.append(f"{rep['emptyShots']} empty shot(s)")
     missing = [p for p in rep["pauses"] if not p.get("clip")]
     if missing:
         issues.append(f"{len(missing)} pause(s) without their own clip")

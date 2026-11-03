@@ -15,6 +15,17 @@ from src.transcribe import Word
 from tests.test_stormdesk import FPS, HAVE_FFMPEG, SENTS, doc_of, make_clip, scene, words_of
 
 
+_NO_NET = mock.patch.object(stormdesk, "_yt_meta", return_value={})
+
+
+def setUpModule():
+    _NO_NET.start()          # offline: a channel lookup never reaches YouTube
+
+
+def tearDownModule():
+    _NO_NET.stop()
+
+
 def _read(path):
     with open(path, encoding="utf-8") as fh:
         return fh.read()
@@ -489,7 +500,7 @@ class LiveRunFindingsTests(unittest.TestCase):
                 taken.add(e["key"])
                 return True
             got = stormdesk.replace_stills(doc, pool=lambda job: [e for e in bank if e["key"] not in taken],
-                                           take=take)
+                                           take=take, info=lambda v: {"channel": "Local Witness"})
             self.assertGreaterEqual(got["replaced"], 4)
             fps = doc["fps"]
             photos = [s for s in doc["scenes"] if stormdesk.is_photo(s)]
@@ -552,6 +563,73 @@ class LiveRunFindingsTests(unittest.TestCase):
     def test_field_rule_names_banners_and_title_cards(self):
         self.assertIn("lower third", vision.FIELD_FOOTAGE_RULE)
         self.assertIn("title card", vision.FIELD_FOOTAGE_RULE)
+
+
+class OriginalSourceTests(unittest.TestCase):
+    """The owner (2026-11-03): no footage from re-upload / compilation channels at all; originals only."""
+
+    def test_source_kinds(self):
+        for ch in ("TERRA DOSSIER", "Weather Is Dangerous", "FM Weather", "Storm-HQ", "Real Weather US", "Disastrrz",
+                   "USA Severe Weather", "StormWatch America", "NationalStormReport", "Crisis Radar", "StormPulse HQ",
+                   "Beyond The Seen", "Final Remnants", "The Daily Atlas", "GeoVara", "Dddd Dd"):
+            self.assertEqual(stormdesk.source_kind(ch), "reupload", ch)
+        for ch, kind in (("News 3 Las Vegas", "station"), ("KTNV Channel 13 Las Vegas", "station"),
+                         ("FOX 10 Phoenix", "station"), ("12 News", "station"), ("WUSA9", "station"),
+                         ("The Weather Channel", "original"), ("NWS Las Vegas", "original"),
+                         ("Clark County Fire Department", "original"), ("Live Storms Media", "original"),
+                         ("Martin von Tirol", "creator"), ("Larry Zimmer", "creator"), ("", "unknown"),
+                         ("YouTube", "unknown")):
+            self.assertEqual(stormdesk.source_kind(ch), kind, ch)
+        self.assertEqual(stormdesk.source_kind("Some Person", description="Copyright Disclaimer Under Section 107"),
+                         "reupload")
+
+    def test_reupload_description_rejected_at_sourcing(self):
+        with mock.patch.object(config, "FIELD_FOOTAGE_ONLY", True), \
+                mock.patch.object(media, "BLOCKED_CHANNELS", ["Desert Rat Explorations", stormdesk.AGGREGATORS]):
+            why = media.meta_reject({"title": "Flood", "channel": "Some Person", "description":
+                                     "Video credit: KTNV. No copyright infringement intended."}, "Flood")
+            self.assertIn("re-upload", why)
+            self.assertIn("blocked", media.meta_reject({"title": "Flood", "channel": "Weather Is Dangerous"}, "Flood"))
+
+    def test_unknown_channels_resolved_and_reuploads_replaced(self):
+        sc = [scene(i, i * 4, i * 4 + 4, f"V{i:010d}", "" if i == 2 else f"Person {i}", 10) for i in range(6)]
+        sc[4]["semanticMetadata"]["channel"] = "Global Weather Network"
+        doc = doc_of(sc)
+        n = stormdesk.resolve_channels(doc, info=lambda v: {"channel": "Henderson Local", "upload_date": "20261101"})
+        self.assertEqual(n, 1)
+        self.assertEqual(doc["scenes"][2]["semanticMetadata"]["channel"], "Henderson Local")
+        why = dict(stormdesk.stills_to_replace(doc))
+        self.assertEqual(why.get(4), "a re-uploader's footage")
+        share = stormdesk.original_share(doc)
+        self.assertAlmostEqual(share["originalShare"], 5 / 6, places=2)
+
+    def test_fallbacks_reuse_an_original_then_hold(self):
+        d = tempfile.mkdtemp()
+        try:
+            clip = os.path.join(d, "orig.mp4")
+            open(clip, "wb").close()
+            sc = [scene(0, 0, 4, "AAAAAAAAAAA", "Person A", 10, clip=20.0),
+                  scene(1, 4, 8, "BBBBBBBBBBB", "Global Weather Network", 10),
+                  scene(2, 8, 12, "CCCCCCCCCCC", "Person C", 10, clip=5.0),
+                  scene(3, 12, 16, "DDDDDDDDDDD", "Person D", 10, clip=20.0)]
+            sc[3]["media"]["url"] = clip
+            doc = doc_of(sc)
+            got = stormdesk.replace_stills(doc, pool=lambda job: [], take=lambda e: True, info=lambda v: {})
+            self.assertEqual(got["replaced"], 1)
+            s1 = doc["scenes"][1]
+            self.assertEqual(s1["media"]["url"], clip)                       # not the neighbours' sources
+            self.assertGreaterEqual(s1["media"]["trimStart"], 4.0)          # after shot 3's own stretch
+            # No original with room: the shot before holds over it.
+            sc = [scene(0, 0, 4, "AAAAAAAAAAA", "Person A", 10, clip=9.0),
+                  scene(1, 4, 8, "BBBBBBBBBBB", "Storm-HQ", 10, words=[{"text": "x", "start": 5, "end": 5.4}])]
+            doc = doc_of(sc)
+            got = stormdesk.replace_stills(doc, pool=lambda job: [], take=lambda e: True, info=lambda v: {})
+            self.assertEqual(got["held"], 1)
+            self.assertEqual(len(doc["scenes"]), 1)
+            self.assertEqual(doc["scenes"][0]["durationInFrames"], 8 * FPS)
+            self.assertTrue(doc["scenes"][0]["words"])
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
 
 
 class EditPromptTests(unittest.TestCase):

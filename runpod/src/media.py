@@ -3617,6 +3617,12 @@ def meta_reject(info: Optional[dict], title: str = "", context: str = "", need: 
     bl = blocked_channel(str(info.get("title") or ""), str(info.get("channel") or info.get("uploader") or ""))
     if bl:
         return f"a blocked source ({bl})"
+    if getattr(config, "FIELD_FOOTAGE_ONLY", False) and BLOCKED_CHANNELS:
+        # Original footage only (the storm desk style): an upload whose description credits someone else's footage
+        # (a fair-use notice, "video credit: ...") is a re-upload, whatever its channel is called.
+        from . import stormdesk
+        if stormdesk.reupload_text(str(info.get("description") or "")):
+            return "a re-upload (its description credits someone else's footage)"
     music = _music_upload(info, line or context)
     if music:
         return music

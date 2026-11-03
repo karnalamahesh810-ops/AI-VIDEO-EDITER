@@ -11,6 +11,17 @@ from unittest import mock
 from src import config, media, stormdesk, styles, vision
 from src.transcribe import Word
 
+_NO_NET = mock.patch.object(stormdesk, "_yt_meta", return_value={})
+
+
+def setUpModule():
+    _NO_NET.start()          # offline: a channel lookup never reaches YouTube
+
+
+def tearDownModule():
+    _NO_NET.stop()
+
+
 FPS = 30
 HAVE_FFMPEG = bool(shutil.which("ffmpeg")) and bool(shutil.which("ffprobe"))
 
