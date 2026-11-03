@@ -62,10 +62,16 @@ SENTS = ["Friday night a wall of water tore through Henderson and three people w
          "We will keep following this story as it develops tonight."]
 
 
-def make_clip(path, seconds=8.0, audio=True, size="320x180"):
+def make_clip(path, seconds=8.0, audio=True, size="320x180", sound="noise", amp=0.3):
+    """A test clip; its sound: "noise" (pink noise with gusts: natural sound), "chord" (three held tones:
+    music) or "sine" (one tone)."""
     cmd = ["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", f"testsrc2=size={size}:rate=30:duration={seconds}"]
     if audio:
-        cmd += ["-f", "lavfi", "-i", f"sine=frequency=440:sample_rate=48000:duration={seconds}"]
+        src = {"noise": f"anoisesrc=color=pink:amplitude={amp}:sample_rate=48000:duration={seconds},"
+                        f"tremolo=f=0.7:d=0.6",
+               "chord": f"aevalsrc={amp}*(sin(2*PI*262*t)+sin(2*PI*330*t)+sin(2*PI*392*t))/3:s=48000:d={seconds}",
+               "sine": f"sine=frequency=440:sample_rate=48000:duration={seconds}"}[sound]
+        cmd += ["-f", "lavfi", "-i", src]
     cmd += ["-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p"]
     if audio:
         cmd += ["-c:a", "aac", "-shortest"]
@@ -113,7 +119,7 @@ class PauseTests(unittest.TestCase):
 
     def test_auto_pauses_spaced_and_at_sentence_ends(self):
         end = self.words[-1].end
-        ps = stormdesk.plan_pauses(self.words, end + 0.5)
+        ps = stormdesk.plan_pauses(self.words, end + 0.5, {"open_clip": False})
         self.assertGreaterEqual(len(ps), 1)
         self.assertTrue(all(p["secs"] == 7.0 for p in ps))
         self.assertGreaterEqual(ps[0]["at"], stormdesk.PAUSE_FIRST_MIN)
@@ -129,17 +135,19 @@ class PauseTests(unittest.TestCase):
 
     def test_count_off_and_by_hand(self):
         end = self.words[-1].end
-        self.assertEqual(stormdesk.plan_pauses(self.words, end, {"pauses": 0}), [])
-        self.assertEqual(stormdesk.plan_pauses(self.words, end, {"pauses": "off"}), [])
-        two = stormdesk.plan_pauses(self.words, end, {"pauses": 2, "pause_seconds": 6})
+        self.assertEqual(stormdesk.plan_pauses(self.words, end, {"pauses": 0, "open_clip": False}), [])
+        self.assertEqual(stormdesk.plan_pauses(self.words, end, {"pauses": "off", "open_clip": False}), [])
+        # The opening clip stays when the middle pauses are off (its own switch).
+        self.assertEqual([p.get("open") for p in stormdesk.plan_pauses(self.words, end, {"pauses": 0})], [True])
+        two = stormdesk.plan_pauses(self.words, end, {"pauses": 2, "pause_seconds": 6, "open_clip": False})
         self.assertEqual(len(two), 2)
         self.assertEqual(two[0]["secs"], 6.0)
-        hand = stormdesk.plan_pauses(self.words, end, {"pauses": [30, 120]})
+        hand = stormdesk.plan_pauses(self.words, end, {"pauses": [30, 120], "open_clip": False})
         self.assertEqual(len(hand), 2)
         self.assertLess(abs(hand[0]["at"] - 30), 8)
 
     def test_first_pause_prefers_the_hook_line(self):
-        ps = stormdesk.plan_pauses(self.words, self.words[-1].end, {"pauses": 1})
+        ps = stormdesk.plan_pauses(self.words, self.words[-1].end, {"pauses": 1, "open_clip": False})
         self.assertIn("stay with us", ps[0]["sentence"].lower())
 
     def test_shift_and_out_pauses(self):
@@ -501,7 +509,8 @@ class HandlerWiringTests(unittest.TestCase):
             ws = words_of(SENTS * 3, wps=2.6)
             ws = [w for w in ws if w.end < 94]
             stored = []
-            got = stormdesk.prepare_narration({"video_style": "storm_desk", "storm_desk": {"pauses": 1}}, ws,
+            got = stormdesk.prepare_narration({"video_style": "storm_desk", "storm_desk": {"pauses": 1,
+                                                                                         "open_clip": False}}, ws,
                                               path, 95.0, d, store=lambda p: stored.append(p) or "https://r2/x")
             self.assertIsNotNone(got)
             self.assertEqual(got["url"], "https://r2/x")
