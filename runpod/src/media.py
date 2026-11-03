@@ -6245,7 +6245,8 @@ def variety_violations(jobs: List[Dict[str, Any]], results) -> Dict[int, tuple]:
         if chan_share > 0 and ch and chan_total > 0:
             secs = float(job.get("seconds") or 0.0)
             had = chan_secs.get(ch, 0.0)
-            if had > 0 and had + secs > chan_share * chan_total + 0.5:
+            # (A source bank shot is counted, never cleared: the bank keeps its own per-source and per-channel caps.)
+            if not bank and had > 0 and had + secs > chan_share * chan_total + 0.5:
                 out[i] = (f"its channel already fills {100 * had / chan_total:.0f}% of the video", "soft")
                 continue
             chan_secs[ch] = had + secs

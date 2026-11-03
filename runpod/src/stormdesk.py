@@ -1211,7 +1211,12 @@ def bake(path: str, boxes: List[List[float]], flip: bool) -> bool:
         return False
     chain, last = [], "0:v"
     for k, (bx, by, bw, bh) in enumerate(boxes):
-        chain.append(f"[{last}]split[m{k}][c{k}];[c{k}]crop=iw*{bw}:ih*{bh}:iw*{bx}:ih*{by},boxblur=20:3[b{k}];"
+        # The blur radius fits the box (a small corner box failed "boxblur=20" on real clips: the radius must stay
+        # under half the box's smaller side).
+        chain.append(f"[{last}]split[m{k}][c{k}];[c{k}]crop=w='max(8,iw*{bw})':h='max(8,ih*{bh})':"
+                     f"x='iw*{bx}':y='ih*{by}',"
+                     f"boxblur=luma_radius='min(20,min(w,h)/2-1)':luma_power=3:"
+                     f"chroma_radius='min(10,min(cw,ch)/2-1)':chroma_power=3[b{k}];"
                      f"[m{k}][b{k}]overlay=main_w*{bx}:main_h*{by}[o{k}]")
         last = f"o{k}"
     chain.append(f"[{last}]{'hflip,' if flip else ''}format=yuv420p,setsar=1[v]")

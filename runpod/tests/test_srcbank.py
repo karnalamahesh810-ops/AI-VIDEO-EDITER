@@ -164,6 +164,65 @@ class Gate(_On):
         self.assertEqual(srcbank._STATE["rejects"]["re-upload channel"], 1)
 
 
+class DeskTitles(unittest.TestCase):
+    def test_desk_formula(self):
+        self.assertTrue(srcbank.desk_title("LAS VEGAS HIT by FLASH FLOODS — 10 RESCUES as Streets Turn to Rivers"))
+        self.assertTrue(srcbank.desk_title("\U0001f6a8 Nevada Underwater: 1 Dead"))
+        self.assertFalse(srcbank.desk_title("Flooding near Stewart and Pecos"))
+        self.assertFalse(srcbank.desk_title("[RAW VIDEO] Cars left stranded in flood waters near Koval"))
+
+    def test_desk_titles_rank_last_unless_a_station(self):
+        story = {"is_event": False}
+        desk = {"title": "LAS VEGAS HIT by FLASH FLOODS — 10 RESCUES", "channel": "Some Desk", "duration": 120}
+        plain = {"title": "Las Vegas flash flooding", "channel": "Some Desk", "duration": 120}
+        self.assertLess(srcbank.rank(desk, ["vegas"], story), srcbank.rank(plain, ["vegas"], story))
+
+
+class Caps(_On):
+    def test_channel_cap_looser_than_source_cap(self):
+        with mock.patch.object(config, "SOURCE_BANK_SHARE", 0.07), \
+                mock.patch.object(config, "SOURCE_BANK_CHANNEL_SHARE", 0.16):
+            src_cap, chan_cap = srcbank._cap_seconds(600.0)
+        self.assertAlmostEqual(src_cap, 42.0)
+        self.assertAlmostEqual(chan_cap, 96.0)
+
+    def test_relaxed_pass_for_an_event_story(self):
+        work = tempfile.mkdtemp()
+        try:
+            lines = [job(i, f"line {i}", seconds=3.0) for i in range(4)]
+
+            def search(q, v, r, cc):
+                return [{"id": f"evt{k:08d}", "title": f"clip {k}", "channel": f"C{k}", "duration": 60}
+                        for k in range(3)]
+
+            def fake_review(src, story_line="", ask=None):
+                for p in src.pieces:
+                    p.ok, p.desc, p.quality = True, "water in a street", 0.8
+                return True
+
+            low = lambda ls, ps, story_line="", ask=None: {j["index"]: [(p.pid, 0.3) for p in ps] for j in ls}  # noqa
+            with mock.patch.object(srcbank, "download", side_effect=lambda s, w: os.path.join(w, s.id)), \
+                    mock.patch.object(srcbank, "scan", side_effect=lambda s, f: srcbank.pieces_from_cuts(s, [], 60.0)), \
+                    mock.patch.object(srcbank, "review", side_effect=fake_review), \
+                    mock.patch.object(srcbank, "match", side_effect=low), \
+                    mock.patch.object(srcbank, "cut", side_effect=lambda p, a, b, j: srcbank.asset_for(p, a, b, j, "x.mp4")), \
+                    mock.patch.object(srcbank, "_embed"), \
+                    mock.patch.object(srcbank, "_story", return_value={"is_event": True}):
+                got = srcbank.fill(lines, work, search=search)
+            self.assertEqual(len(got), 4)                       # all at fit 0.3: the relaxed pass only
+            self.assertEqual(srcbank.stats()["filledRelaxed"], 4)
+            srcbank.reset()
+            with mock.patch.object(srcbank, "download", side_effect=lambda s, w: os.path.join(w, s.id)), \
+                    mock.patch.object(srcbank, "scan", side_effect=lambda s, f: srcbank.pieces_from_cuts(s, [], 60.0)), \
+                    mock.patch.object(srcbank, "review", side_effect=fake_review), \
+                    mock.patch.object(srcbank, "match", side_effect=low), \
+                    mock.patch.object(srcbank, "_embed"), \
+                    mock.patch.object(srcbank, "_story", return_value={"is_event": False}):
+                self.assertEqual(srcbank.fill(lines, work, search=search), {})   # not an event: close matches only
+        finally:
+            shutil.rmtree(work, ignore_errors=True)
+
+
 class Pieces(unittest.TestCase):
     def test_takes_split_and_short_shots_dropped(self):
         s = srcbank.Source(id="x" * 11)

@@ -303,7 +303,23 @@ def rank(c: dict, topic_words: Sequence[str], story: dict) -> float:
         r -= 0.5
     if re.search(r"\b(live|livestream|podcast|reaction|explained|interview|press conference|forecast|futurecast|first alert|weather update|briefing|vlog)\b", title, re.I):
         r -= 1.5
+    if kind not in ("station", "original") and desk_title(title):
+        r -= 2.0                        # a re-upload desk's headline formula: reviewed last, if at all
     return round(r, 3)
+
+
+_DESK_VERB = re.compile(r"\b(?:HIT|SLAMMED|STRUCK|SWALLOWED|BATTERED|DROWNED|DESTROYED|SMASHED)\s+(?:BY|AGAIN)\b|"
+                        r"\b(?:CHAOS|DISASTER|EMERGENCY|TRAGEDY|UNDER ?WATER)\b.{0,30}(?:!|—|\|)", re.I)
+
+
+def desk_title(title: str) -> bool:
+    """A headline in the re-upload desks' formula: a siren emoji, mostly capitals, "<PLACE> HIT BY ..." with an
+    em dash, bars or "!" (the Las Vegas run's 46 sources were mostly these)."""
+    t = str(title or "")
+    letters = [c for c in t if c.isalpha()]
+    caps = sum(1 for c in letters if c.isupper()) / float(len(letters) or 1)
+    return ("\U0001f6a8" in t or (caps > 0.6 and len(letters) > 18)
+            or bool(_DESK_VERB.search(t) and ("—" in t or "|" in t or "!" in t)))
 
 
 def shortlist(lines: Sequence[dict], story: dict, require_cc: bool,
@@ -363,7 +379,7 @@ def shortlist(lines: Sequence[dict], story: dict, require_cc: bool,
             continue
         per_chan[ch] += 1
         keep.append(s)
-    want = max(int(getattr(config, "SOURCE_BANK_MIN_SOURCES", 10)), math.ceil(len(lines) / 3.0))
+    want = max(int(getattr(config, "SOURCE_BANK_MIN_SOURCES", 16)), math.ceil(len(lines) / 2.0))
     return keep[:min(int(getattr(config, "SOURCE_BANK_MAX_SOURCES", 32)), want)]
 
 
@@ -949,16 +965,14 @@ def _spread(scored: List[Tuple[str, float, float]], by_id: Dict[str, Piece]) -> 
 # --------------------------------------------------------------------------- #
 
 def _cap_seconds(total: float) -> Tuple[float, float]:
-    """(seconds one source may fill, seconds one channel may fill). With the style's CHANNEL_MAX_SHARE (storm desk
-    ~7%) the channel cap is exactly what the variety rules allow (media.variety_violations), and a source never
-    more than its channel."""
+    """(seconds one source video may fill, seconds one channel may fill): the owner's "no single source carries
+    the video" per source (SOURCE_BANK_SHARE, storm desk ~7%), and a looser cap per channel
+    (SOURCE_BANK_CHANNEL_SHARE): a local station with five reports of the event may give more than one report's
+    share. Measured 2026-11-03: a per-channel 7% left 104 of 119 approved shots unused on a 4-minute video."""
     share = float(getattr(config, "SOURCE_BANK_SHARE", 0.08))
     src_cap = max(float(getattr(config, "SOURCE_BANK_MIN_CAP", 12.0)), share * total)
-    chan_share = float(getattr(config, "CHANNEL_MAX_SHARE", 0) or 0)
-    if chan_share > 0:
-        chan_cap = chan_share * total + 0.5
-        return min(src_cap, chan_cap), chan_cap
-    return src_cap, 2.0 * src_cap
+    chan_share = float(getattr(config, "SOURCE_BANK_CHANNEL_SHARE", 0.16))
+    return src_cap, max(src_cap, chan_share * total)
 
 
 def _window(p: Piece, need: float, used: List[Tuple[float, float]]) -> Optional[Tuple[float, float]]:
@@ -1251,6 +1265,16 @@ def fill(jobs: Sequence[dict], work: str, *, require_cc: bool = False, report: O
         _STATE["ranks"] = ranks
         got = _place_and_cut(lines, ranks, pieces)
         _STATE["stats"]["filled"] += len(got)
+        if _STATE["story"].get("is_event") and getattr(config, "SOURCE_BANK_EVENT_RELAXED", True):
+            # A story about an event: every bank source was searched for it and reviewed whole, so a line no shot
+            # matched closely still gets real footage of the event (lower fit) before the per-line search hands
+            # it a web photo (the first proof run, 2026-11-03: 31 lines left, 18% of the runtime became photos).
+            rest = [j for j in lines if j["index"] not in got]
+            if rest:
+                more = _place_and_cut(rest, ranks, pieces,
+                                      floor=float(getattr(config, "SOURCE_BANK_EVENT_FLOOR", 0.28)))
+                _STATE["stats"]["filledRelaxed"] += len(more)
+                got.update(more)
         return got
     except Exception as e:  # noqa: BLE001 - the bank never fails a video: the per-line search takes over
         print(f"[bank] stopped: {type(e).__name__}: {str(e)[:200]}", flush=True)
