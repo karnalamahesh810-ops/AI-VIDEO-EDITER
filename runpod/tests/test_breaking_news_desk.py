@@ -632,6 +632,64 @@ class OriginalSourceTests(unittest.TestCase):
             shutil.rmtree(d, ignore_errors=True)
 
 
+class OwnerRound3Tests(unittest.TestCase):
+    """Side-panel logo, J / L cuts at the pauses, the editor's adjustment line."""
+
+    @unittest.skipUnless(HAVE_FFMPEG, "ffmpeg")
+    def test_vertical_clip_on_blur_found_landscape_not(self):
+        from src import upscale
+        d = tempfile.mkdtemp()
+        try:
+            vert = os.path.join(d, "v.mp4")
+            subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i",
+                            "testsrc2=size=360x640:rate=30:duration=3", "-c:v", "libx264", "-preset", "ultrafast",
+                            "-pix_fmt", "yuv420p", vert], check=True)
+            self.assertTrue(upscale.frame_vertical(vert, 960, 540))
+            land = make_clip(os.path.join(d, "l.mp4"), 3.0, audio=False, size="960x540")
+            panel = stormdesk.blurred_sides(stormdesk.frames(vert, 0.0, 3.0, n=4))
+            self.assertTrue(0.4 <= panel <= 0.75, panel)
+            self.assertEqual(stormdesk.blurred_sides(stormdesk.frames(land, 0.0, 3.0, n=4)), 0.0)
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_side_logo_option(self):
+        doc = doc_of([scene(0, 0, 30, "AAAAAAAAAAA", "A", 10)])
+        self.assertTrue(stormdesk.graphics(doc, {"video_style": "storm_desk"}, [], {}, None, None)["sideLogo"])
+        off = {"video_style": "storm_desk", "storm_desk": {"side_logo": False}}
+        self.assertFalse(stormdesk.graphics(doc, off, [], {}, None, None)["sideLogo"])
+        comp = _read(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "remotion", "src",
+                                  "components", "brand", "StormDesk.tsx"))
+        self.assertIn("SideLogos", comp)
+        self.assertIn("desk.sideLogo !== false", comp)
+
+    @unittest.skipUnless(HAVE_FFMPEG, "ffmpeg")
+    def test_pause_sound_leads_and_trails(self):
+        d = tempfile.mkdtemp()
+        try:
+            clip = make_clip(os.path.join(d, "p.mp4"), 12.0, sound="noise")
+            doc = {"fps": FPS, "scenes": [{"id": "p", "startFrame": 3 * FPS, "durationInFrames": 7 * FPS,
+                                           "natSound": True, "media": {"type": "video", "url": clip, "trimStart": 2.0}}],
+                   "meta": {"stormDesk": {"pauses": [{"t0": 3.0, "t1": 10.0}]}}}
+            track, rows = stormdesk.nat_track(doc, 14.0, 0.0)
+            self.assertEqual((rows[0]["lead"], rows[0]["tail"]), (stormdesk.J_LEAD, stormdesk.L_TAIL))
+            np = _np()
+            sr = 48000
+            self.assertGreater(float(np.abs(track[int(2.8 * sr):int(2.95 * sr)]).max()), 0.0)   # before the picture
+            self.assertGreater(float(np.abs(track[int(10.1 * sr):int(10.3 * sr)]).max()), 0.0)  # after it
+            self.assertEqual(float(np.abs(track[int(11 * sr):]).max()), 0.0)
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_adjustment_line_contract(self):
+        root = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "remotion", "src")
+        main = _read(os.path.join(root, "Main.tsx"))
+        adj = _read(os.path.join(root, "edit", "adjust.tsx"))
+        types = _read(os.path.join(root, "types.ts"))
+        self.assertIn("<Adjusted video={props.adjust} clip={scene.adjust}>", main)
+        self.assertIn("export function mergeAdjust", adj)
+        self.assertEqual(types.count('adjust?: import("./edit/adjust").Adjust | null;'), 2)
+
+
 class EditPromptTests(unittest.TestCase):
     def tearDown(self):
         director.set_edit_prompt("")

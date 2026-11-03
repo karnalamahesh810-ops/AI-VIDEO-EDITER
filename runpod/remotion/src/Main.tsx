@@ -1,6 +1,7 @@
 import React from "react";
 import { AbsoluteFill, Audio, Easing, Sequence, interpolate, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
 import { SceneClip } from "./components/SceneClip";
+import { Adjusted } from "./edit/adjust";
 import { BlurBackdrop } from "./components/AnimationScene";
 import { KScale } from "./components/pro/ProGraphics";
 import { CaptionTrack } from "./components/Captions";
@@ -537,13 +538,16 @@ const Body: React.FC<TimelineProps> = (props) => {
           {/* The next scene's transition starts over this scene's last frames. */}
           <CrossfadeIn active={scene.transition === "crossfade" && i > 0}>
             {/* A full-screen animation scene plays its look's own sound too. */}
-            {withSound(<SceneClip scene={scene} accent={captions.accent} accent2={accent2} backdrop={backdrops[scene.id]}
-              nextTransition={scenes[i + 1]?.transition} />, lookSounds[`s${i}`])}
+            {/* The editor's adjustment line (doc.adjust, scene.adjust over it: edit/adjust.tsx). */}
+            <Adjusted video={props.adjust} clip={scene.adjust}>
+              {withSound(<SceneClip scene={scene} accent={captions.accent} accent2={accent2} backdrop={backdrops[scene.id]}
+                nextTransition={scenes[i + 1]?.transition} />, lookSounds[`s${i}`])}
+            </Adjusted>
           </CrossfadeIn>
         </Sequence>
       ),
     };
-  }), [scenes, premount, captions.accent, accent2, backdrops, lookSounds]);
+  }), [scenes, premount, captions.accent, accent2, backdrops, lookSounds, props.adjust]);
   const overlayItems = React.useMemo<WindowItem[]>(() => (overlays || []).map((ov, i) => {
     // Never past the end of the video: the look's own exit (MotionWrap, inside its duration) then
     // always plays whole instead of the outer sequence cutting it mid-exit.

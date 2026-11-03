@@ -186,6 +186,27 @@ const Credit: React.FC<{ scene?: Scene; s: number }> = ({ scene, s }) => {
   );
 };
 
+/**
+ * The logo on the blurred side panels of a vertical clip framed in the centre (scene.blurSides.panel = the centre
+ * panel's share of the width; the reference channels put their mark there). desk.sideLogo false = off.
+ */
+const SideLogos: React.FC<{ scene?: Scene; url?: string; text: string; s: number; width: number }> = (
+  { scene, url, text, s, width }) => {
+  const panel = Number((scene as any)?.blurSides?.panel);
+  if (!scene || !Number.isFinite(panel) || panel <= 0 || panel >= 0.9 || (!url && !text)) return null;
+  const side = (1 - panel) / 2 * width;
+  if (side < 140 * s) return null;
+  const w = Math.min(side * 0.62, 300 * s);
+  const box = (left: number) => (
+    <div key={left} style={{ position: "absolute", left, top: 0, bottom: 0, width: side, display: "flex",
+      alignItems: "center", justifyContent: "center", opacity: 0.88,
+      filter: `drop-shadow(0 ${2 * s}px ${8 * s}px rgba(0,0,0,0.55))` }}>
+      <Logo url={url} text={text} height={w * 0.62} width={w} color="rgba(255,255,255,0.9)" />
+    </div>
+  );
+  return <>{box(0)}{box(width - side)}</>;
+};
+
 export const StormDesk: React.FC<{ desk: StormDeskDoc; scenes: Scene[] }> = ({ desk, scenes }) => {
   const frame = useCurrentFrame();
   const { width, height } = useVideoConfig();
@@ -206,6 +227,8 @@ export const StormDesk: React.FC<{ desk: StormDeskDoc; scenes: Scene[] }> = ({ d
   const sub = (desk.subscribe || []).find((x) => frame >= x.startFrame && frame < x.startFrame + x.durationInFrames);
   return (
     <AbsoluteFill style={{ pointerEvents: "none" }}>
+      {desk.sideLogo !== false ? <SideLogos scene={current} url={logoUrl} text={logoText} s={s} width={width} />
+        : null}
       {/* The logo bug: always on, top-left, slightly translucent. */}
       <div style={{ position: "absolute", left: 36 * s, top: 22 * s, height: 92 * s, display: "flex",
         alignItems: "center", opacity: Math.max(0.3, Math.min(1, Number(desk.bug?.opacity ?? 0.9))),

@@ -359,6 +359,11 @@ export interface Scene {
    */
   openClip?: boolean;
   clipSound?: boolean;
+  /** A vertical clip framed in the centre over its own blur (the worker's upscale.frame_vertical): the centre
+   * panel's share of the frame's width; the Breaking News Desk logo sits on the side panels. */
+  blurSides?: { panel: number };
+  /** This clip's own adjustments over the video's (doc.adjust; edit/adjust.tsx). */
+  adjust?: import("./edit/adjust").Adjust | null;
 }
 
 /** One row of a chart, comparison or timeline. */
@@ -676,12 +681,16 @@ export interface StormDeskDoc {
    * ducked by duckDb) or "off" (none, unless a clip says scene.clipSound true). Pause clips always play.
    */
   clipSound?: { mode: "ambient" | "off"; underVoiceDb?: number; duckDb?: number };
+  /** The logo on the blurred side panels of vertical clips (scene.blurSides); false = off, absent = on. */
+  sideLogo?: boolean;
 }
 
 export interface TimelineProps {
   schemaVersion?: number;
   /** The storm desk style's graphics (StormDeskDoc); absent = none. */
   stormDesk?: StormDeskDoc | null;
+  /** The editor's adjustment line for every clip (edit/adjust.tsx); a scene's own adjust wins key by key. */
+  adjust?: import("./edit/adjust").Adjust | null;
   /** The channel's watermark (ChannelMarkDoc); absent = none. */
   channelMark?: ChannelMarkDoc | null;
   fps: number;

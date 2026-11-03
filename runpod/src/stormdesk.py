@@ -72,6 +72,8 @@ SUB_FIRST, SUB_EVERY, SUB_HOLD = 50.0, 120.0, 5.5
 HEADLINE_LINE = 26              # characters a lower-third line holds (measured 25-26)
 NAT_LUFS = -20.0                # a pause clip's sound before the master (the laptop mix)
 NAT_FADE = 0.2
+J_LEAD = 0.35                   # a pause's sound starts this much before its picture (a J cut)
+L_TAIL = 0.6                    # ... and fades out under the narration's first words after it (an L cut)
 MUSIC_UNDER_VOICE_DB = 21.0     # the user's own track under the narration (the owner's Hoover / Sedona mix)
 MUSIC_SPEECH_DUCK_DB = 3.0      # ... and this much lower while a word is spoken
 MASTER_LUFS, MASTER_TP = -14.0, -1.5
@@ -957,6 +959,35 @@ def static_marks(fr: list) -> List[List[float]]:
         boxes.append([round(x, 4), round(y, 4), round(min(1.0 - x, bw + 2 * pad), 4),
                       round(min(1.0 - y, bh + 2 * pad), 4)])
     return boxes
+
+
+def blurred_sides(fr: list) -> float:
+    """
+    A vertical clip framed in the centre over its own blur (upscale.frame_vertical): the sharp centre panel's
+    share of the width, else 0. Read from the frames: the detail (grey change between neighbouring pixels,
+    averaged over the frames and smoothed across columns) in the outer fifths is a small fraction of the centre's.
+    """
+    try:
+        import numpy as np
+    except ImportError:
+        return 0.0
+    if len(fr) < 2:
+        return 0.0
+    col = np.mean([np.abs(np.diff(f.astype(np.float32).mean(axis=2), axis=1)).mean(axis=0) for f in fr], axis=0)
+    w = len(col)
+    k = max(3, w // 40)
+    col = np.convolve(col, np.ones(k) / k, mode="same")
+    mid = float(col[int(w * 0.35):int(w * 0.65)].mean())
+    if mid < 0.5:
+        return 0.0                                                  # a flat picture says nothing
+    side = max(float(col[k:int(w * 0.18)].mean()), float(col[-int(w * 0.18):-k].mean()))
+    if side > 0.25 * mid:
+        return 0.0
+    sharp = np.where(col > 0.4 * mid)[0]
+    if not len(sharp):
+        return 0.0
+    share = (int(sharp.max()) - int(sharp.min()) + 1) / float(w)
+    return round(share, 3) if 0.25 <= share <= 0.85 else 0.0
 
 
 def bake(path: str, boxes: List[List[float]], flip: bool) -> bool:
@@ -1956,7 +1987,8 @@ def graphics(doc: dict, inp: dict, blocks: List[dict], brief: Optional[dict], ki
         name = str(opts.get("channel_name") or inp["channel_watermark"].get("text") or "").strip()
     return {"version": 1, "colors": colors(inp, kit), "logo": {"url": logo_url, "text": name[:24]},
             "bug": {"opacity": 0.9}, "lowerThirds": lts, "location": loc, "subscribe": subs, "credits": True,
-            "clipSound": {"mode": clip_sound_mode(opts), "underVoiceDb": UNDER_VOICE_DB, "duckDb": UNDER_DUCK_DB}}
+            "clipSound": {"mode": clip_sound_mode(opts), "underVoiceDb": UNDER_VOICE_DB, "duckDb": UNDER_DUCK_DB},
+            "sideLogo": opts.get("side_logo", True) is not False}
 
 
 def music_level(doc: dict) -> Optional[dict]:
@@ -2118,6 +2150,18 @@ def finish(doc: dict, inp: dict, brief: Optional[dict] = None, work: str = "", f
         if not fr:
             return
         thumbs[i] = fr[1 if len(fr) > 1 else 0]
+        # A vertical clip on its blurred fill: where the side-panel logo goes (StormDesk.tsx SideLogos).
+        try:
+            from . import config as _cfg, upscale
+            framed = os.path.abspath(path) in getattr(upscale, "FRAMED", set())
+            band = float(getattr(_cfg, "VERTICAL_BAND_ASPECT", 1.051) or 1.051)
+        except Exception:  # noqa: BLE001
+            framed, band = False, 1.051
+        panel = blurred_sides(fr)
+        if framed and not panel:
+            panel = round(min(0.85, int(doc.get("height") or 1080) * band / float(int(doc.get("width") or 1920))), 3)
+        if panel:
+            s["blurSides"] = {"panel": panel}
         if not s.get("natSound"):
             # What its own sound is (src/clipaudio.py): only natural sound plays under the narration.
             try:
@@ -2297,7 +2341,13 @@ def nat_track(doc: dict, total: float, offset: float, sr: int = 48000, resolve: 
         a, b = max(t0, win[0]), min(t1, win[1])
         if b - a < 0.5 or not src:
             continue
-        trim = float((s.get("media") or {}).get("trimStart") or 0.0) + (a - t0)
+        # J / L cuts (the owner's editing rule): the clip's sound comes up a beat before the narration stops
+        # (as far as the clip has sound before its picture) and runs on under the first words after the pause.
+        trim0 = float((s.get("media") or {}).get("trimStart") or 0.0) + (a - t0)
+        lead = min(J_LEAD, max(0.0, trim0)) if not s.get("openClip") else 0.0
+        tail = L_TAIL
+        a, b = a - lead, b + tail
+        trim = trim0 - lead
         try:
             x = _read_audio(src, trim, b - a, sr, f"loudnorm=I={NAT_LUFS}:TP=-3:LRA=11")
         except Exception as e:  # noqa: BLE001 - this pause plays without its sound
@@ -2311,12 +2361,15 @@ def nat_track(doc: dict, total: float, offset: float, sr: int = 48000, resolve: 
         if m <= 0:
             continue
         g = np.ones(m, np.float32)
-        r = min(m // 2, int(NAT_FADE * sr))
-        if r:
-            g[:r] = np.linspace(0, 1, r)
-            g[-r:] = np.linspace(1, 0, r)
+        r_in = min(m // 2, int(max(NAT_FADE, lead) * sr))
+        r_out = min(m // 2, int(max(NAT_FADE, tail) * sr))
+        if r_in:
+            g[:r_in] = np.linspace(0, 1, r_in)
+        if r_out:
+            g[-r_out:] = np.linspace(1, 0, r_out)
         track[o:o + m] += x[:m] * g[:, None]
-        rows.append({"at": round(a, 2), "seconds": round(m / sr, 2), "ok": True})
+        rows.append({"at": round(a, 2), "seconds": round(m / sr, 2), "ok": True, "lead": round(lead, 2),
+                     "tail": round(tail, 2)})
     return track, rows
 
 
