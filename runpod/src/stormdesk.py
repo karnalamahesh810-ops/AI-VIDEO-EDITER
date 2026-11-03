@@ -85,10 +85,25 @@ UNDER_GAIN_MAX_DB = 12.0        # a very quiet clip is lifted at most this much 
 MIX_MARGIN_DB = 15.0            # the mix check: the clip sound under a word at least this far below the voice
 PAUSE_TRIES = 3                 # candidate clips fetched and scored for a pause (4 for the opening)
 PAUSE_SLACK = 4.0               # seconds fetched beyond the pause, to pick its best stretch
+PAUSE_SPEECH_MAX = 0.6          # a pause clip talking more of the time than this is a report, not a reaction
 CLIP_SOUND_MODES = ("ambient", "off")
 
-# The owner's blocklist (2026-11-02): never this channel's footage, in any storm desk video.
-DEFAULT_BLOCKLIST = ("Desert Rat Explorations",)
+# The owner's blocklist (2026-11-02): never this channel's footage, in any storm desk video. Since 2026-11-03 also
+# the news-compilation / re-upload channels whose own graphics are burned into their footage (the owner's Las Vegas
+# run showed their lower thirds and banners): the Global Storm Desk network and its look-alikes.
+DEFAULT_BLOCKLIST = ("Desert Rat Explorations",
+                     "Global Storm Desk", "The Mercer Report", "Weather Alert Wire", "American Weather System",
+                     "Global Weather Network", "Planet Weather", "Storm Global", "Storm Desk USA",
+                     "Weather Impact USA", "Disaster Wire")
+# The list entry that also turns down channels NAMED like such a compilation desk ("<Global|Planet|US ...> Storm /
+# Weather / Disaster <Desk|Wire|Network|Impact|Report ...>"), and the prefix of a name that is always allowed (the
+# customer's own channel: "!US Weather Alert").
+AGGREGATORS = "@aggregators"
+_AGGREGATOR = re.compile(
+    r"^(?:the\s+)?(?:global|planet|world|us|usa|u\.s\.|american|america's|national|daily|breaking|live|extreme|"
+    r"severe)?\s*(?:storm|weather|disaster|climate|flood|catastrophe|nature'?s?|earth)\s+(?:desk|wire|network|impact|"
+    r"report|alert|alerts|tracker|hub|zone|global|central|watch|files|chronicle|news|today|daily|now|usa|us|tv)"
+    r"(?:\s+(?:usa|us|news|tv|live|daily|network|report|hd|channel))?$", re.I)
 
 # The reference's colours (STYLE.md 3.1-3.5); the customer's brand kit replaces the navy and blue.
 COLORS = {"logo": "#0B2856", "logo2": "#051531", "bar": "#1B4CA0", "bar2": "#08296A", "rim": "#769CE8",
@@ -155,8 +170,16 @@ def open_seconds(opts: Optional[dict]) -> float:
 
 
 def blocklist(inp: Optional[dict]) -> List[str]:
-    """The channels this job never uses: the owner's list for the style, plus the job's own."""
+    """The channels this job never uses: the owner's list for the style (and channels named like a compilation
+    desk, but never the customer's own channel), plus the job's own."""
     names = list(DEFAULT_BLOCKLIST) if is_style(inp) else []
+    if names:
+        names.append(AGGREGATORS)
+        own = options(inp).get("channel_name") or (inp or {}).get("channel_title") or ""
+        if isinstance((inp or {}).get("channel_watermark"), str):
+            own = own or inp["channel_watermark"]
+        if str(own).strip():
+            names.append("!" + str(own).strip()[:80])
     raw = (inp or {}).get("blocked_sources")
     if isinstance(raw, str):
         raw = re.split(r"[,\n;]+", raw)
@@ -167,6 +190,96 @@ def blocklist(inp: Optional[dict]) -> List[str]:
     return names
 
 
+# Local stations by the place they serve (the Las Vegas run, 2026-11-03: "WBFF FOX45 Baltimore" and "WUSA9" under a
+# Las Vegas story). Cities a channel name may carry, and well-known call signs; anything else falls back to the
+# call sign's letter (K west of the Mississippi, W east of it).
+_CITY_STATE = {
+    "las vegas": "nevada", "henderson": "nevada", "reno": "nevada", "phoenix": "arizona", "tucson": "arizona",
+    "flagstaff": "arizona", "sedona": "arizona", "baltimore": "maryland", "washington dc": "dc", "dc": "dc",
+    "chicago": "illinois", "houston": "texas", "dallas": "texas", "fort worth": "texas", "austin": "texas",
+    "san antonio": "texas", "el paso": "texas", "denver": "colorado", "atlanta": "georgia", "miami": "florida",
+    "orlando": "florida", "tampa": "florida", "jacksonville": "florida", "new york": "new york", "nyc": "new york",
+    "buffalo": "new york", "albany": "new york", "boston": "massachusetts", "philadelphia": "pennsylvania",
+    "pittsburgh": "pennsylvania", "seattle": "washington", "spokane": "washington", "los angeles": "california",
+    "san diego": "california", "san francisco": "california", "bay area": "california", "sacramento": "california",
+    "fresno": "california", "detroit": "michigan", "minneapolis": "minnesota", "twin cities": "minnesota",
+    "st. louis": "missouri", "st louis": "missouri", "kansas city": "missouri", "cleveland": "ohio",
+    "columbus": "ohio", "cincinnati": "ohio", "nashville": "tennessee", "memphis": "tennessee",
+    "knoxville": "tennessee", "charlotte": "north carolina", "raleigh": "north carolina", "new orleans": "louisiana",
+    "baton rouge": "louisiana", "salt lake": "utah", "albuquerque": "new mexico", "oklahoma city": "oklahoma",
+    "tulsa": "oklahoma", "omaha": "nebraska", "indianapolis": "indiana", "milwaukee": "wisconsin",
+    "louisville": "kentucky", "birmingham": "alabama", "richmond": "virginia", "norfolk": "virginia",
+    "hartford": "connecticut", "providence": "rhode island", "honolulu": "hawaii", "anchorage": "alaska",
+    "boise": "idaho", "little rock": "arkansas", "des moines": "iowa", "wichita": "kansas", "portland": "oregon",
+    "asheville": "north carolina", "chattanooga": "tennessee", "savannah": "georgia", "palm springs": "california"}
+_CALL_STATE = {
+    "WUSA": "dc", "WJLA": "dc", "WRC": "dc", "WTTG": "dc", "WBFF": "maryland", "WBAL": "maryland", "WJZ": "maryland",
+    "WMAR": "maryland", "WABC": "new york", "WNBC": "new york", "WCBS": "new york", "WPIX": "new york",
+    "KTLA": "california", "KABC": "california", "KNBC": "california", "KCBS": "california", "KTNV": "nevada",
+    "KSNV": "nevada", "KVVU": "nevada", "KLAS": "nevada", "KPNX": "arizona", "KNXV": "arizona", "KSAZ": "arizona",
+    "KTVK": "arizona", "KDKA": "pennsylvania", "WFAA": "texas", "WBAP": "texas", "WOAI": "texas", "KHOU": "texas",
+    "KPRC": "texas", "KTRK": "texas", "WGN": "illinois", "WLS": "illinois", "WMAQ": "illinois", "KUSA": "colorado",
+    "KDVR": "colorado", "KMGH": "colorado", "WSB": "georgia", "WXIA": "georgia", "WPLG": "florida", "WSVN": "florida",
+    "WFTV": "florida", "WFLA": "florida", "KING": "washington", "KOMO": "washington", "KIRO": "washington"}
+# States west of the Mississippi (call signs start with K there, W east of it - a rule with old exceptions).
+_WEST = {"alaska", "arizona", "arkansas", "california", "colorado", "hawaii", "idaho", "iowa", "kansas", "louisiana",
+         "minnesota", "missouri", "montana", "nebraska", "nevada", "new mexico", "north dakota", "oklahoma",
+         "oregon", "south dakota", "texas", "utah", "washington", "wyoming"}
+_STATION = re.compile(r"\d|\bnews\b|\btv\b|\babc\b|\bnbc\b|\bcbs\b|\bfox\b|\bchannel\b|\bcw\b|'s family\b", re.I)
+_CALL = re.compile(r"(?<![A-Za-z])([KW][A-Z]{2,3})(?:-?(?:TV|DT|HD|CD|LD))?(?:\s?\d{1,2})?(?![A-Za-z])")
+
+
+def _places_named(text: str) -> set:
+    low = f" {str(text or '').lower()} "
+    out = set()
+    for city, st in _CITY_STATE.items():
+        if re.search(r"(?<![a-z])" + re.escape(city) + r"(?![a-z])", low):
+            out.add(st)
+    for name, code in _STATES.items():
+        if re.search(r"(?<![a-z])" + re.escape(name) + r"(?![a-z])", low):
+            out.add(name)
+    if "washington" in out and re.search(r"washington,?\s*d\.?c\.?", low):
+        out.discard("washington")
+        out.add("dc")
+    return out
+
+
+def station_conflict(channel: str, title: str, story_places: set) -> str:
+    """
+    Why a local station's upload cannot show this story's place ("" = fine): the channel names another city or
+    state, or its call sign belongs to another place (a known one, else K/W against the story's side of the
+    Mississippi) - unless the upload's own title names the story's place.
+    """
+    story = {str(p).lower() for p in story_places or set() if p}
+    if not story or not str(channel or "").strip():
+        return ""
+    if _places_named(title) & story:
+        return ""
+    m = _CALL.search(str(channel))
+    call = m.group(1) if m else ""
+    known = (_CALL_STATE.get(call) or _CALL_STATE.get(call[:3])) if call else ""
+    if known:
+        return "" if known in story else f"a station from another place ({call}: {known})"
+    if not _STATION.search(str(channel)):
+        return ""                       # not a local station by its name (a newspaper, an agency, a creator)
+    named = _places_named(channel)
+    if named and not (named & story):
+        return f"a station from another place ({', '.join(sorted(named))[:40]})"
+    if not call:
+        return ""
+    sides = {("west" if p in _WEST else "east") for p in story if p in _WEST or p in set(_STATES) or p == "dc"}
+    if len(sides) == 1:
+        side = next(iter(sides))
+        if (side == "west" and call.startswith("W")) or (side == "east" and call.startswith("K")):
+            return f"a station from another part of the country ({call})"
+    return ""
+
+
+def story_places(text: str) -> set:
+    """The states (and DC) a story's text names, by state or by city."""
+    return _places_named(text)
+
+
 def _norm_name(s: str) -> str:
     return re.sub(r"[^a-z0-9]+", "", str(s or "").lower())
 
@@ -174,10 +287,17 @@ def _norm_name(s: str) -> str:
 def blocked(channel: str, title: str, names: Sequence[str]) -> str:
     """The blocklist entry a candidate matches by its channel (or, failing that, its title), or ''."""
     ch, ti = _norm_name(channel), _norm_name(title)
+    allowed = {_norm_name(n[1:]) for n in names if str(n).startswith("!")}
+    if ch and ch in allowed:
+        return ""
     for n in names:
+        if str(n).startswith(("!", "@")):
+            continue
         k = _norm_name(n)
         if k and (k == ch or (len(k) >= 8 and (k in ch or k in ti))):
             return n
+    if AGGREGATORS in names and channel and _AGGREGATOR.match(re.sub(r"\s+", " ", str(channel)).strip()):
+        return "a news-compilation channel"
     return ""
 
 
@@ -915,6 +1035,10 @@ def pause_score(path: str, secs: float, title: str = "", relevance: float = 0.5,
     kind = info.get("kind")
     if kind in ("music", "silent", "unknown"):
         return {"reject": f"its sound is {kind}", "audio": info}
+    if float(info.get("speech") or 0.0) >= PAUSE_SPEECH_MAX:
+        # Talking all the way through: a reporter or an interview, not an eyewitness reacting (the Las Vegas run's
+        # pause on a station's report).
+        return {"reject": "talking all the way through", "audio": info}
     sr = clipaudio.SR
     blk = int(0.25 * sr)
     nb = len(x) // blk if x is not None else 0
@@ -948,7 +1072,9 @@ def pause_score(path: str, secs: float, title: str = "", relevance: float = 0.5,
 
 def make_pauses(doc: dict, pauses: List[dict], work: str, fetch: Optional[Callable] = None,
                 frame_vertical: Optional[Callable[[str], bool]] = None,
-                check: Optional[Callable[[str], str]] = None) -> List[dict]:
+                check: Optional[Callable[[str], str]] = None,
+                spare_pool: Optional[Callable[[dict], List[dict]]] = None,
+                spare_take: Optional[Callable[[dict], bool]] = None) -> List[dict]:
     """
     Each pause window becomes one scene: a continuous clip with its own sound (scene.natSound), cut from a
     source this block already uses, at a moment no shot shows, never the source of the shot before or after it.
@@ -981,7 +1107,8 @@ def make_pauses(doc: dict, pauses: List[dict], work: str, fetch: Optional[Callab
         if is_open:
             pool = sorted([s for s in scenes if not is_ai(s)], key=lambda s: -_relevance(s))
         else:
-            pool = inside + list(reversed([s for s in scenes if p0 - 90 * fps <= _end(s) <= p0])) +                 [s for s in scenes if p1 <= int(s["startFrame"]) <= p1 + 30 * fps]
+            pool = (inside + list(reversed([s for s in scenes if p0 - 90 * fps <= _end(s) <= p0]))
+                    + [s for s in scenes if p1 <= int(s["startFrame"]) <= p1 + 30 * fps])
         tries: List[Tuple[dict, str, float]] = []
         seen: set = set()
         for c in pool:
@@ -1029,6 +1156,35 @@ def make_pauses(doc: dict, pauses: List[dict], work: str, fetch: Optional[Callab
                     scored.append({"video": t[1], "at": round(t[2], 1), "score": sc["score"]})
                     if best is None or sc["score"] > best[2]["score"]:
                         best = (t, got, sc)
+        if best is None:
+            # Nothing fetched (the routes refused, or every candidate was music / a report / a banner): the job's
+            # spare bank - footage it already downloaded with its sound and the judge passed, shown nowhere.
+            job = {"index": f"pause{k}", "context": p.get("sentence", ""), "intent": "natural sound of the event",
+                   "query": " ".join(str(_sm(c).get("searchQuery") or "") for c in pool[:3])}
+            for e in (spare_pool or _spare_pool)(job)[:6]:
+                vid = f"yt:{e.get('vid')}" if e.get("vid") else ""
+                ep = str(e.get("path") or "")
+                if not vid or not ep or not os.path.isfile(ep) or vid in seen:
+                    continue
+                if any(source_key(x) in (prev_key, next_key) for x in scenes if video_id(x) == vid):
+                    continue
+                st0 = float(e.get("start") or 0.0)
+                if any(abs(st0 - a) < gap for a, _b in used.get(vid, [])):
+                    continue
+                if (_probe(ep).get("duration") or 0.0) < secs:
+                    continue
+                if not _audible(ep):
+                    continue
+                sc = pause_score(ep, secs, title=str(e.get("title") or ""), relevance=0.5)
+                if sc is None or sc.get("reject") or check(ep):
+                    continue
+                if not (spare_take or _spare_take)(e):
+                    continue
+                donor = {"media": {"source": "youtube", "attribution": f"YouTube: {e.get('title') or ''}"[:300]},
+                         "semanticMetadata": {"contentDescription": str(e.get("description") or "")[:300]}}
+                best = ((donor, vid, st0), ep, sc)
+                scored.append({"video": vid, "at": round(st0, 1), "score": sc["score"], "spare": True})
+                break
         if best is not None:
             (c, vid, start), path, sc = best
             if frame_vertical is not None:
@@ -1234,7 +1390,184 @@ def repeats(doc: dict) -> List[dict]:
             if min(b, mo[2]) - max(a, mo[1]) >= 0.3:
                 out.append({"shot": i, "same_as": j, "video": mo[0], "at": round(mo[1], 1)})
         seen.setdefault(mo[0], []).append((mo[1], mo[2], i))
+    # The same picture twice (the Las Vegas run showed four photos two times each).
+    pics: Dict[str, int] = {}
+    for i, s in enumerate(doc["scenes"]):
+        k = photo_key(s)
+        if not k:
+            continue
+        if k in pics:
+            out.append({"shot": i, "same_as": pics[k], "photo": True})
+        else:
+            pics[k] = i
     return out
+
+
+# --------------------------------------------------------------------------- #
+# Stills: real clips first (the owner's Las Vegas review, 2026-11-03: ~45 photos of 145 shots, some twice)
+# --------------------------------------------------------------------------- #
+
+PHOTO_SHARE_MAX = 0.10          # photos at most this share of the shots, the last resort; never in the opening
+
+
+def is_photo(scene: dict) -> bool:
+    return (scene.get("media") or {}).get("type") == "image" and not is_ai(scene)
+
+
+def is_empty(scene: dict) -> bool:
+    m = scene.get("media") or {}
+    return m.get("type") not in ("video", "image", "animation") or not str(m.get("url") or "").strip()
+
+
+def photo_key(scene: dict) -> str:
+    """One picture, whichever line shows it: its source page / link, else its title."""
+    if not is_photo(scene):
+        return ""
+    sm = _sm(scene)
+    m = scene.get("media") or {}
+    for raw in (sm.get("assetId"), sm.get("pageUrl"), sm.get("sourceUrl"), m.get("url")):
+        raw = str(raw or "").split("?")[0].strip()
+        if raw:
+            return "u:" + raw
+    t = _norm_name(m.get("attribution") or "")
+    return ("t:" + t) if len(t) >= 12 else ""
+
+
+def photo_years(scene: dict) -> List[int]:
+    """Years a picture's title or description names ("Flood devastation in 1999")."""
+    sm = _sm(scene)
+    blob = " ".join(str(x or "") for x in ((scene.get("media") or {}).get("attribution"),
+                                           sm.get("contentDescription"), sm.get("sourceTitle")))
+    return [int(y) for y in re.findall(r"\b(19\d\d|20\d\d)\b", blob)]
+
+
+def stills_to_replace(doc: dict, opening: float = NO_AI_SECONDS,
+                      share: float = PHOTO_SHARE_MAX) -> List[Tuple[int, str]]:
+    """[(scene index, why)]: empty shots, a picture shown again, pictures in the opening, then the pictures past
+    `share` of the shots (the latest first: the opening and the hook keep the real clips)."""
+    fps = int(doc.get("fps") or 30)
+    sc = doc["scenes"]
+    out: List[Tuple[int, str]] = []
+    seen: set = set()
+    for i, s in enumerate(sc):
+        if s.get("natSound") or (s.get("media") or {}).get("type") == "animation":
+            continue
+        if is_empty(s):
+            out.append((i, "empty"))
+            continue
+        k = photo_key(s)
+        if not k:
+            continue
+        if k in seen:
+            out.append((i, "the same picture again"))
+        elif int(s["startFrame"]) < opening * fps:
+            out.append((i, "a picture in the opening"))
+        seen.add(k)
+    taken = {i for i, _ in out}
+    photos = [i for i, s in enumerate(sc) if is_photo(s) and i not in taken]
+    cap = int(share * max(1, len(sc)))
+    for i in reversed(photos[cap:]):
+        out.append((i, f"more than {int(share * 100)}% pictures"))
+    return out
+
+
+def _spare_pool(job: dict) -> List[dict]:
+    try:
+        from . import spares
+        return spares.candidates(job, "video", limit=10)
+    except Exception:  # noqa: BLE001 - no bank: nothing replaced
+        return []
+
+
+def _spare_take(entry: dict) -> bool:
+    try:
+        from . import spares
+        return spares.take(entry)
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def replace_stills(doc: dict, pool: Optional[Callable[[dict], List[dict]]] = None,
+                   take: Optional[Callable[[dict], bool]] = None,
+                   check: Optional[Callable[[str], str]] = None) -> dict:
+    """
+    Real clips for the shots stills_to_replace names, from the job's spare bank (src/spares.py: footage this job
+    already downloaded and the judge passed, not shown anywhere): the best word match whose source is not the
+    shot before's or after's, whose moment no other shot shows, and long enough. A picture left in the opening
+    trades places with a real clip later on. Returns {"replaced", "moved", "left": [(index, why)]}.
+    """
+    fps = int(doc.get("fps") or 30)
+    sc = doc["scenes"]
+    pool = pool or _spare_pool
+    take = take or _spare_take
+    gap = _moment_gap()
+    used: Dict[str, List[float]] = {}
+    for s in sc:
+        mo = moment(s, fps)
+        if mo:
+            used.setdefault(mo[0], []).append(mo[1])
+    done, moved, left = 0, 0, []
+    for i, why in stills_to_replace(doc):
+        s = sc[i]
+        secs = int(s["durationInFrames"]) / float(fps)
+        sm = _sm(s)
+        job = {"index": i, "intent": sm.get("intent") or "", "context": s.get("text") or "",
+               "query": s.get("query") or sm.get("searchQuery") or "", "subject": sm.get("subject") or "",
+               "place": " ".join(str(p) for p in (sm.get("locations") or []) if p)}
+        near = {source_key(sc[j]) for j in (i - 1, i + 1) if 0 <= j < len(sc)}
+        got = None
+        for e in pool(job) or []:
+            vid = f"yt:{e.get('vid')}" if e.get("vid") else ""
+            path = str(e.get("path") or "")
+            if not vid or not path or not os.path.isfile(path):
+                continue
+            if vid in near or any(abs(float(e.get("start") or 0.0) - t) < gap for t in used.get(vid, [])):
+                continue
+            room = _probe(path).get("duration") or 0.0
+            if room < secs - 0.05:
+                continue
+            if check is not None and check(path):
+                continue
+            if not take(e):
+                continue
+            got = (e, vid, room)
+            break
+        if got is None:
+            left.append((i, why))
+            continue
+        e, vid, room = got
+        start = float(e.get("start") or 0.0)
+        s["media"] = {"type": "video", "url": e["path"], "source": "youtube",
+                      "attribution": f"YouTube: {e.get('title') or ''}"[:300], "clipSeconds": round(room, 3)}
+        s["semanticMetadata"] = {**{k: v for k, v in sm.items() if k not in ("channel", "uploadDate", "pageUrl")},
+                                 "sourceUrl": f"https://www.youtube.com/watch?v={vid[3:]}&t={int(start)}",
+                                 "moment": {"start": round(start, 2)}, "assetId": f"{vid}@{int(start)}",
+                                 "contentDescription": str(e.get("description") or "")[:300],
+                                 "provider": "youtube", "replacedStill": why}
+        s["visualType"] = "footage"
+        s["motion"] = "none"
+        s.pop("reviewRequired", None)
+        used.setdefault(vid, []).append(start)
+        done += 1
+    # A picture still in the opening: trades places with a real clip later on.
+    still_left = []
+    for i, why in left:
+        if why == "a picture in the opening":
+            swapped = False
+            for j in range(len(sc) - 1, i, -1):
+                if int(sc[j]["startFrame"]) < NO_AI_SECONDS * fps:
+                    break
+                if (sc[j].get("media") or {}).get("type") == "video" and not sc[j].get("natSound") \
+                        and not is_ai(sc[j]) and _swap_ok(sc, i, j, fps):
+                    _swap(sc, i, j)
+                    moved += 1
+                    swapped = True
+                    break
+            if not swapped:
+                still_left.append((i, why))
+            continue
+        still_left.append((i, why))
+    return {"replaced": done, "moved": moved, "left": still_left}
 
 
 def shares(doc: dict) -> List[dict]:
@@ -1451,6 +1784,9 @@ def finish(doc: dict, inp: dict, brief: Optional[dict] = None, work: str = "", f
 
     pauses = out_pauses(inp.get("_storm_pauses") or [])
     rep["pauses"] = step("pauses", lambda: make_pauses(doc, pauses, work, fetch, frame_vertical, check)) or []
+    st = step("stills", lambda: replace_stills(doc, check=check)) or {}
+    rep["stillsReplaced"], rep["stillsMoved"] = st.get("replaced", 0), st.get("moved", 0)
+    rep["stillsLeft"] = [{"shot": i, "why": w} for i, w in (st.get("left") or [])][:40]
     rep["shotsCut"] = step("shot cap", lambda: cap_shots(doc)) or 0
     moved = step("ai opening", lambda: keep_ai_out_of_opening(doc)) or (0, 0)
     rep["aiMovedOutOfOpening"], rep["aiInOpening"] = moved
@@ -1475,6 +1811,12 @@ def finish(doc: dict, inp: dict, brief: Optional[dict] = None, work: str = "", f
             s["credit"] = {"text": "AI ILLUSTRATION", "ai": True}
             continue
         arch = archive(s, day, brief)
+        if not arch and is_photo(s):
+            # A picture whose title names an earlier year than the event's: an older storm's (the Las Vegas run's
+            # "Flood devastation in 1999").
+            yr = (brief or {}).get("year")
+            ref = day.year if day else (yr if isinstance(yr, int) and not isinstance(yr, bool) else None)
+            arch = bool(ref) and any(y < ref for y in photo_years(s))
         n_arch += int(arch)
         label = "VIDEO" if m.get("type") == "video" else "PHOTO"
         s["credit"] = {"text": f"{label}: {credit_name(s)}", **({"archive": True} if arch else {})}
@@ -1861,7 +2203,10 @@ def _duration(path: str, stream: str) -> float:
         out = subprocess.run(["ffprobe", "-v", "error", "-select_streams", f"{stream}:0", "-show_entries",
                               "stream=duration", "-of", "csv=p=0", path], capture_output=True, text=True,
                              timeout=60).stdout.strip().split("\n")[0]
-        return float(out)
+        # (A stream with side data prints "95.467333," - the old float() of that was 0, which skipped the sync
+        # check on every real render: the live run of 2026-11-03.)
+        m = re.match(r"\s*([0-9]+(?:\.[0-9]+)?)", out)
+        return float(m.group(1)) if m else 0.0
     except (ValueError, subprocess.SubprocessError, OSError):
         return 0.0
 

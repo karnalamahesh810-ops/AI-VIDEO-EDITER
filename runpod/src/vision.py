@@ -324,7 +324,10 @@ FIELD_FOOTAGE_RULE = (
     "is_talking_head true and score 0 for an interview, a press conference or briefing at a podium, a reporter, "
     "anchor, presenter, storm chaser or YouTuber talking to the camera (face-cam, selfie video), a TV studio or "
     "news desk, a split screen with a talking head, and for a shot where hands, feet or legs fill the frame or a "
-    "hand holds a phone, a sign or an object up to the camera. A crowd, an eyewitness filming what happens, "
+    "hand holds a phone, a sign or an object up to the camera, a station's title card or full-screen graphic "
+    "(\"NEW VIDEO\", a time stamp card, a warning map), and another channel's large burned-in banner, lower third, "
+    "headline bar or ticker over the picture (a small station logo in a corner is fine). A crowd, an eyewitness "
+    "filming what happens, "
     "rescuers at work or people far away in the scene are fine.\n")
 
 

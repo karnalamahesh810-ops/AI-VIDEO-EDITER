@@ -385,6 +385,175 @@ class SourcingTests(unittest.TestCase):
         self.assertIn("holds a phone", vision.FIELD_FOOTAGE_RULE)
 
 
+class LiveRunFindingsTests(unittest.TestCase):
+    """The owner's Las Vegas run (project 5f60d3ad, 2026-11-03, image 6138ae1) and the Sedona live check."""
+
+    def test_compilation_channels_blocked_but_not_the_customers_own(self):
+        names = stormdesk.blocklist({"video_style": "storm_desk", "storm_desk": {"channel_name": "US Weather Alert"}})
+        for ch in ("Global Storm Desk and 2 more", "Global Weather Network", "Planet Weather", "STORM GLOBAL",
+                   "Storm Desk USA", "Weather Impact USA", "Disaster Wire", "The Mercer Report", "Weather Alert Wire",
+                   "American Weather System", "The Earth Desk", "Severe Weather Tracker"):
+            self.assertTrue(stormdesk.blocked(ch, "", names), ch)
+        for ch in ("US Weather Alert", "News 3 Las Vegas", "KTNV Channel 13 Las Vegas", "FOX 10 Phoenix",
+                   "The Weather Channel", "Storm Chasing Video", "Reed Timmer"):
+            self.assertFalse(stormdesk.blocked(ch, "", names), ch)
+        # Other styles: nothing but the job's own list.
+        self.assertEqual(stormdesk.blocklist({"video_style": "documentary"}), [])
+
+    @unittest.skipUnless(HAVE_FFMPEG, "ffmpeg")
+    def test_burned_in_banner_rejected_clean_footage_kept(self):
+        from src import slop
+        d = tempfile.mkdtemp()
+        try:
+            np = _np()
+            from PIL import Image
+            bar = np.zeros((110, 1024, 4), np.uint8)
+            bar[..., 0:3] = (20, 40, 120)
+            bar[..., 3] = 255
+            for x in range(40, 984, 14):
+                bar[30:80, x:x + 6, 0:3] = 255
+            Image.fromarray(bar).save(os.path.join(d, "bar.png"))
+            for name, extra in (("banner.mp4", True), ("clean.mp4", False)):
+                cmd = ["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=size=1280x720:rate=30:duration=5"]
+                if extra:
+                    cmd += ["-i", os.path.join(d, "bar.png"), "-filter_complex", "[0][1]overlay=60:560"]
+                subprocess.run(cmd + ["-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
+                                      os.path.join(d, name)], check=True)
+            self.assertTrue(slop.banner_verdict(os.path.join(d, "banner.mp4")))
+            self.assertEqual(slop.banner_verdict(os.path.join(d, "clean.mp4")), "")
+            with mock.patch.object(config, "FIELD_FOOTAGE_ONLY", True), \
+                    mock.patch.object(slop, "clip_verdict", return_value={}), \
+                    mock.patch.object(slop, "still_verdict", return_value=""):
+                self.assertIn("banner", slop.check_file(os.path.join(d, "banner.mp4"), "video"))
+            with mock.patch.object(config, "FIELD_FOOTAGE_ONLY", False), \
+                    mock.patch.object(slop, "clip_verdict", return_value={}), \
+                    mock.patch.object(slop, "still_verdict", return_value=""):
+                self.assertEqual(slop.check_file(os.path.join(d, "banner.mp4"), "video"), "")
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_local_station_must_match_the_place(self):
+        vegas = stormdesk.story_places("Las Vegas flash flood, Henderson, Nevada")
+        self.assertEqual(vegas, {"nevada"})
+        self.assertTrue(stormdesk.station_conflict("WBFF FOX45 Baltimore", "Flooding rescue", vegas))
+        self.assertTrue(stormdesk.station_conflict("WUSA9", "Storm damage", vegas))
+        self.assertEqual(stormdesk.station_conflict("News 3 Las Vegas", "Flood", vegas), "")
+        self.assertEqual(stormdesk.station_conflict("FOX 10 Phoenix", "Las Vegas flooding video", vegas), "")
+        self.assertEqual(stormdesk.station_conflict("New York Post", "Wild flooding", vegas), "")   # not a station
+        self.assertEqual(stormdesk.station_conflict("WBFF FOX45 Baltimore", "x", set()), "")        # no story place
+        with mock.patch.object(config, "FIELD_FOOTAGE_ONLY", True), \
+                mock.patch.object(media, "_story_blob", return_value=({"places": ["Las Vegas, Nevada"]}, "")):
+            self.assertTrue(media.station_place_conflict("Flood", "WUSA9"))
+            self.assertFalse(media._usable_title("Flood rescue", "WBFF FOX45 Baltimore"))
+        with mock.patch.object(config, "FIELD_FOOTAGE_ONLY", False):
+            self.assertEqual(media.station_place_conflict("Flood", "WUSA9"), "")
+
+    def _stills_doc(self):
+        sc = []
+        for i in range(20):
+            if i in (1, 5, 8, 11, 14, 17):
+                s = scene(i, i * 4, i * 4 + 4, kind="image")
+                s["media"]["url"] = f"https://img/{i}.jpg"
+                s["semanticMetadata"]["assetId"] = f"https://img/{i}.jpg"
+            else:
+                s = scene(i, i * 4, i * 4 + 4, f"V{i:010d}", f"Chan {i}", 10)
+            sc.append(s)
+        sc[17]["semanticMetadata"]["assetId"] = "https://img/14.jpg"      # the same picture again
+        sc[17]["media"]["url"] = "https://img/14.jpg"
+        sc[3]["media"] = {"type": "color", "url": ""}                     # an empty shot
+        return doc_of(sc)
+
+    def test_stills_named_for_replacement(self):
+        doc = self._stills_doc()
+        why = dict(stormdesk.stills_to_replace(doc, opening=20.0, share=0.10))
+        self.assertEqual(why.get(3), "empty")
+        self.assertEqual(why.get(1), "a picture in the opening")
+        self.assertEqual(why.get(17), "the same picture again")
+        self.assertTrue(any("pictures" in w for w in why.values()))
+        rep = stormdesk.repeats(doc)
+        self.assertTrue(any(r.get("photo") and r["shot"] == 17 for r in rep))
+
+    @unittest.skipUnless(HAVE_FFMPEG, "ffmpeg")
+    def test_stills_replaced_from_the_spare_bank(self):
+        d = tempfile.mkdtemp()
+        try:
+            doc = self._stills_doc()
+            files = [make_clip(os.path.join(d, f"sp{k}.mp4"), 6.0) for k in range(8)]
+            bank = [{"key": f"yt:S{k:010d}@5", "vid": f"S{k:010d}", "start": 5.0, "path": files[k],
+                     "title": f"Flood spare {k}", "description": "floodwater"} for k in range(8)]
+            taken = set()
+
+            def take(e):
+                if e["key"] in taken:
+                    return False
+                taken.add(e["key"])
+                return True
+            got = stormdesk.replace_stills(doc, pool=lambda job: [e for e in bank if e["key"] not in taken],
+                                           take=take)
+            self.assertGreaterEqual(got["replaced"], 4)
+            fps = doc["fps"]
+            photos = [s for s in doc["scenes"] if stormdesk.is_photo(s)]
+            self.assertLessEqual(len(photos), int(0.10 * len(doc["scenes"])))
+            self.assertFalse([s for s in doc["scenes"] if stormdesk.is_photo(s)
+                              and s["startFrame"] < stormdesk.NO_AI_SECONDS * fps])
+            self.assertFalse([s for s in doc["scenes"] if stormdesk.is_empty(s)])
+            self.assertFalse([r for r in stormdesk.repeats(doc) if r.get("photo")])
+            self.assertEqual(doc["scenes"][3]["media"]["type"], "video")
+            self.assertTrue(doc["scenes"][3]["semanticMetadata"]["replacedStill"])
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_old_picture_gets_the_archive_label(self):
+        s = scene(0, 0, 4, kind="image")
+        s["media"]["attribution"] = "Flood devastation in 1999"
+        self.assertEqual(stormdesk.photo_years(s), [1999])
+        doc = doc_of([s, scene(1, 4, 8, "AAAAAAAAAAA", "A", 10)])
+        inp = {"video_style": "storm_desk", "storm_desk": {"open_clip": False, "pauses": 0, "lookalike": False,
+                                                           "blur_marks": False, "event_date": "2026-11-01"},
+               "_event_day": "2026-11-01"}
+        with mock.patch.object(stormdesk, "replace_stills", return_value={}):
+            stormdesk.finish(doc, inp, {"year": 2026}, ".")
+        img = next(x for x in doc["scenes"] if x["media"]["type"] == "image")
+        self.assertTrue(img["credit"].get("archive"))
+
+    def test_pause_rejects_a_report_talking_throughout(self):
+        np = _np()
+        x = (np.random.RandomState(4).randn(16000 * 10) * 0.1).astype(np.float32)
+        talk = {"kind": "speech", "speech": 0.9, "music": 0.0, "db": -20.0}
+        react = {"kind": "speech", "speech": 0.3, "music": 0.0, "db": -20.0}
+        with mock.patch.object(clipaudio, "read_mono", return_value=x), \
+                mock.patch.object(stormdesk, "frames", return_value=[]):
+            self.assertIn("talking", stormdesk.pause_score("x.mp4", 7.0, classify=lambda *a, **k: talk)["reject"])
+            self.assertIn("score", stormdesk.pause_score("x.mp4", 7.0, classify=lambda *a, **k: react))
+
+    @unittest.skipUnless(HAVE_FFMPEG, "ffmpeg")
+    def test_pause_falls_back_to_the_spare_bank(self):
+        d = tempfile.mkdtemp()
+        try:
+            spare = make_clip(os.path.join(d, "spare.mp4"), 10.0, sound="noise", amp=0.6)
+            sc = [scene(0, 0, 5, "AAAAAAAAAAA", "A", 10), scene(1, 5, 10, "BBBBBBBBBBB", "B", 10),
+                  scene(2, 10, 15, "CCCCCCCCCCC", "C", 10)]
+            doc = doc_of(sc)
+            bank = [{"key": "yt:ZZZZZZZZZZZ@40", "vid": "ZZZZZZZZZZZ", "start": 40.0, "path": spare, "title": "Flood"}]
+            rows = stormdesk.make_pauses(doc, [{"t0": 4.0, "t1": 11.0}], d, fetch=lambda *a: "", check=lambda p: "",
+                                         spare_pool=lambda job: bank, spare_take=lambda e: True)
+            self.assertEqual(rows[0]["video"], "yt:ZZZZZZZZZZZ")
+            self.assertTrue(any(c.get("spare") for c in rows[0]["candidates"]))
+            self.assertTrue([s for s in doc["scenes"] if s.get("natSound")])
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    @unittest.skipUnless(HAVE_FFMPEG, "ffmpeg")
+    def test_picture_length_read_from_a_stream_with_side_data(self):
+        with mock.patch.object(stormdesk.subprocess, "run",
+                               return_value=mock.Mock(stdout="95.467333,\n")):
+            self.assertAlmostEqual(stormdesk._duration("x.mp4", "v"), 95.467333)
+
+    def test_field_rule_names_banners_and_title_cards(self):
+        self.assertIn("lower third", vision.FIELD_FOOTAGE_RULE)
+        self.assertIn("title card", vision.FIELD_FOOTAGE_RULE)
+
+
 class EditPromptTests(unittest.TestCase):
     def tearDown(self):
         director.set_edit_prompt("")

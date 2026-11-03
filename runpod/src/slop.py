@@ -417,6 +417,79 @@ def captions_verdict(path: str) -> str:
 
 
 # --------------------------------------------------------------------------- #
+# 2c. Pixels: another channel's banner / lower third burned into the footage
+# --------------------------------------------------------------------------- #
+#
+# The storm desk style's Las Vegas run (2026-11-03) showed news-compilation channels' own lower thirds ("ONE DEAD
+# AFTER RESCUE..."), "BREAKING NEWS" banners and headline bars over their re-uploads. Such a graphic is a wide
+# text band that stays exactly where it is while the picture under it moves. Only with config.FIELD_FOOTAGE_ONLY.
+
+BANNER_MIN_WIDTH = 0.45     # a band this wide (share of the frame) - a station's corner logo is far narrower
+BANNER_MIN_TALL = 0.035
+
+
+def _wide_bands(g) -> List[tuple]:
+    """(a, b, x0, x1) text bands in the lower 45% or the top 18% of a frame, at least BANNER_MIN_WIDTH wide."""
+    import numpy as np
+    h, w = g.shape
+    rows = [r for r in _text_rows(g) if r >= 0.55 * h or r <= 0.18 * h]
+    out = []
+    for a, b in _bands(rows):
+        if (b - a + 1) / h < BANNER_MIN_TALL:
+            continue
+        edges = np.abs(np.diff(g[a:b + 1].astype(np.int16), axis=1)) > 48
+        cols = np.where(edges.sum(axis=0) >= 2)[0]
+        if not len(cols):
+            continue
+        x0, x1 = int(cols.min()), int(cols.max())
+        if (x1 - x0) / w >= BANNER_MIN_WIDTH:
+            out.append((a, b, x0, x1))
+    return out
+
+
+def banner_bands(grays: list) -> dict:
+    """{"frames", "steady", "moving", "n"}: frames with a wide text band, and of consecutive pairs both carrying
+    one at the same rows, how many keep the band's pixels still (a burned-in graphic) while the rest moves."""
+    import numpy as np
+    out = {"frames": 0, "steady": 0, "moving": 0, "n": len(grays or [])}
+    found = []
+    for g in grays or []:
+        bands = _wide_bands(np.asarray(g, dtype=np.float32))
+        found.append(bands)
+        out["frames"] += 1 if bands else 0
+    for g0, g1, f0, f1 in zip(grays or [], (grays or [])[1:], found, found[1:]):
+        x0 = np.asarray(g0, dtype=np.float32)
+        x1 = np.asarray(g1, dtype=np.float32)
+        rest = float(np.abs(x0 - x1).mean())
+        if rest >= 3.0:
+            out["moving"] += 1
+        for a, b, c0, c1 in f0:
+            same = [t for t in f1 if abs(t[0] - a) <= 2 and abs(t[1] - b) <= 2]
+            if not same:
+                continue
+            band = float(np.abs(x0[a:b + 1, c0:c1 + 1] - x1[a:b + 1, c0:c1 + 1]).mean())
+            if rest >= 3.0 and band <= 0.35 * rest:
+                out["steady"] += 1
+                break
+    return out
+
+
+def banner_verdict(path: str) -> str:
+    """"another channel's banner or lower third" when a moving clip carries a wide text band that holds still in
+    most of its frames, else "". A locked-off shot is never judged (everything in it holds still)."""
+    if not path or not os.path.isfile(path):
+        return ""
+    grays = _gray_frames(path, 6, 320, 180)
+    if len(grays) < 3:
+        return ""
+    c = banner_bands(grays)
+    pairs = len(grays) - 1
+    if c["moving"] >= max(2, pairs // 2) and c["frames"] >= max(3, len(grays) // 2) and c["steady"] >= max(2, pairs // 2):
+        return "another channel's banner or lower third"
+    return ""
+
+
+# --------------------------------------------------------------------------- #
 # 3. Local CLIP: painted / generated pictures, and what kind of shot it is
 # --------------------------------------------------------------------------- #
 
@@ -582,5 +655,9 @@ def check_file(path: str, kind: str = "video", allow_people: bool = False, allow
         why = captions_verdict(path)
         if why:
             return why
+        if getattr(config, "FIELD_FOOTAGE_ONLY", False):
+            why = banner_verdict(path)
+            if why:
+                return why
     v = clip_verdict(_rgb_frames(path, 3), allow_people=allow_people, allow_maps=allow_maps, kind=kind)
     return (v or {}).get("reject") or ""

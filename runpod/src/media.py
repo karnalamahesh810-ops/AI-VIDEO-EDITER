@@ -1502,6 +1502,8 @@ def _usable_title(title: str, channel: str = "", aspect: float = 0.0, context: s
         return False
     if _talking_head(title or "", context or ""):
         return False
+    if station_place_conflict(title or "", channel or "", context or ""):
+        return False                        # a local station of another city (field footage only)
     if aspect and aspect < 1.2 and not config.ALLOW_VERTICAL:
         return False                        # vertical, unusable in 16:9
     # AI-made (an "AI story", Sora, Midjourney...) or a game: never real footage (src/slop.py).
@@ -1509,6 +1511,18 @@ def _usable_title(title: str, channel: str = "", aspect: float = 0.0, context: s
     if slop.enabled() and slop.metadata_reason(title, channel):
         return False
     return True
+
+
+def station_place_conflict(title: str, channel: str, context: str = "") -> str:
+    """For field footage only (config.FIELD_FOOTAGE_ONLY, the storm desk style): why a local station's upload shows
+    another place than the story's and the line's (stormdesk.station_conflict; "" = fine or unknown)."""
+    if not getattr(config, "FIELD_FOOTAGE_ONLY", False) or not channel:
+        return ""
+    from . import stormdesk
+    brief, _story = _story_blob()
+    places = stormdesk.story_places(" ".join([str(brief.get("event") or ""), " ".join(brief.get("places") or [])]))
+    places |= stormdesk.story_places(context or "")
+    return stormdesk.station_conflict(channel, title, places)
 
 
 def _stock_seller(*texts: str) -> bool:
@@ -3626,7 +3640,8 @@ def meta_reject(info: Optional[dict], title: str = "", context: str = "", need: 
         dur = 0.0
     if dur and need and dur < need:
         return "shorter than the shot"
-    return upload_conflict(info) or title_conflict(name, context)
+    return upload_conflict(info) or title_conflict(name, context) or station_place_conflict(
+        name, str(info.get("channel") or info.get("uploader") or ""), context)
 
 
 def _prequalified(ranked: list, want: int, context: str, need: float, line: str = "", query: str = "") -> list:
