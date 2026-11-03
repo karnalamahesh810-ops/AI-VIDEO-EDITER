@@ -1751,7 +1751,7 @@ def under_track(doc: dict, total: float, offset: float, voice_db: float, sr: int
     duck = 1.0 - (1.0 - 10 ** (-UNDER_DUCK_DB / 20.0)) * np.clip(talk_s, 0, 1)
     mode = str((((doc.get("stormDesk") or {}).get("clipSound")) or {}).get("mode") or "off")
     below = float((((doc.get("stormDesk") or {}).get("clipSound")) or {}).get("underVoiceDb") or UNDER_VOICE_DB)
-    below = max(12.0, min(30.0, below))
+    below = max(12.0, min(30.0, abs(below)))       # dB below the voice (an editor's -20 reads the same)
     todo = [s for s in doc.get("scenes") or [] if (s.get("media") or {}).get("type") == "video"
             and clipaudio.plays_under_voice(s, mode)]
     rows: List[dict] = []
