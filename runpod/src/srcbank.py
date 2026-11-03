@@ -125,8 +125,8 @@ def reset() -> None:
 
 
 def ids() -> set:
-    """The YouTube ids the bank downloaded (the per-line search leaves them alone)."""
-    return set(_STATE["ids"])
+    """The YouTube ids the bank downloaded or found re-uploading (the per-line search leaves them alone)."""
+    return set(_STATE["ids"]) | set(_STATE.get("blocked_ids") or ())
 
 
 def stats() -> dict:
@@ -140,6 +140,9 @@ def stats() -> dict:
             "approved": sum(1 for s in srcs for p in s.pieces if p.ok),
             "seconds": {k: round(v, 1) for k, v in st["seconds"].items()},
             "kinds": dict(Counter(s.kind for s in srcs)),
+            "used": [{"id": s.id, "channel": s.channel[:40], "kind": s.kind, "archive": s.archive,
+                      "seconds": round(st["src_secs"].get(s.id, 0.0), 1),
+                      "shots": per_src.get(f"yt:{s.id}", 0)} for s in srcs if per_src.get(f"yt:{s.id}")][:40],
             "archive": sum(1 for s in srcs if s.archive)}
 
 
@@ -1208,6 +1211,13 @@ def build(jobs: Sequence[dict], work: str, *, require_cc: bool = False, report: 
             p.src = k
         if s.why:
             st["rejects"][s.why] += 1
+            if _REUPLOAD_WHY.search(s.why) and s.kind not in ("station", "original"):
+                # Seen re-uploading: the per-line search and every later fetch of this job leave its channel and
+                # its uploads alone too (media.BLOCKED_CHANNELS, ids()).
+                st.setdefault("blocked_ids", set()).add(s.id)
+                if s.channel.strip() and s.channel not in media.BLOCKED_CHANNELS:
+                    media.BLOCKED_CHANNELS.append(s.channel)
+                    st["stats"]["channelsBlocked"] += 1
         else:
             st["ids"].add(s.id)
             st["stats"]["reviewCached"] += int(s.cached)
@@ -1215,6 +1225,9 @@ def build(jobs: Sequence[dict], work: str, *, require_cc: bool = False, report: 
     with _Timer("embed"):
         _embed([p for s in srcs if not s.why for p in s.pieces])
     return srcs
+
+
+_REUPLOAD_WHY = re.compile(r"re-upload|compilation")
 
 
 def _approved() -> List[Piece]:
@@ -1290,7 +1303,7 @@ def fill_gaps(jobs: Sequence[dict], results, work: str = "") -> Dict[int, Any]:
 
         empty = [j for j in sorted(jobs, key=lambda j: j["index"]) if at(j["index"]) is None
                  and (j.get("visual_type") or "footage") in ("footage", "image")
-                 and j.get("subject_type") != "person"]
+                 and j.get("subject_type") not in ("person", "document")]
         if not empty:
             return {}
         neighbours = {}

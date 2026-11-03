@@ -373,6 +373,37 @@ class EndToEnd(_On):
         finally:
             shutil.rmtree(work, ignore_errors=True)
 
+    def test_a_reuploader_found_by_the_review_is_blocked_for_the_job(self):
+        work = tempfile.mkdtemp()
+        media.set_blocked_channels([])
+        try:
+            lines = [job(i, "flood", seconds=3.5) for i in range(6)]
+
+            def search(q, v, r, cc):
+                return [{"id": "rup00000001", "title": "LAS VEGAS HIT by FLOODS", "channel": "Anik POV News",
+                         "duration": 300},
+                        {"id": "stn00000001", "title": "Flooding near Stewart", "channel": "News 3 Las Vegas",
+                         "duration": 120}]
+
+            def fake_review(src, story_line="", ask=None):
+                for p in src.pieces:
+                    p.ok, p.desc = True, "flooded street"
+                src.compilation = src.id.startswith("rup")
+                return True
+
+            with mock.patch.object(srcbank, "download", side_effect=lambda s, w: os.path.join(w, s.id)), \
+                    mock.patch.object(srcbank, "scan", side_effect=lambda s, f: srcbank.pieces_from_cuts(s, [], 60.0)), \
+                    mock.patch.object(srcbank, "review", side_effect=fake_review), \
+                    mock.patch.object(srcbank, "cut", side_effect=lambda p, a, b, j: srcbank.asset_for(p, a, b, j, "x.mp4")), \
+                    mock.patch.object(srcbank, "_embed"), mock.patch.object(config, "SOURCE_BANK_MODEL_MATCH", False):
+                got = srcbank.fill(lines, work, search=search)
+            self.assertIn("Anik POV News", media.BLOCKED_CHANNELS)
+            self.assertIn("rup00000001", srcbank.ids())
+            self.assertTrue(all("stn00000001" in a.moment_key for a in got.values()))
+        finally:
+            media.set_blocked_channels([])
+            shutil.rmtree(work, ignore_errors=True)
+
     def test_bank_failure_never_fails_the_video(self):
         with mock.patch.object(srcbank, "build", side_effect=RuntimeError("boom")):
             self.assertEqual(srcbank.fill([job(0, "x")], tempfile.gettempdir()), {})
