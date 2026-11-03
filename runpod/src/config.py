@@ -209,6 +209,29 @@ AI_FILL_SECONDS = float(os.getenv("AI_FILL_SECONDS", "480"))
 AI_FILL_MAX_BUDGET = float(os.getenv("AI_FILL_MAX_BUDGET", "10"))
 # Every AI picture and clip is looked at once (real-looking, on its line, no garbled text or melted hands).
 AI_FILL_CHECK = _flag("AI_FILL_CHECK", True)
+# A pass with many pictures and clips (the owner's own numbers, 2026-11-03: up to 300 pictures + 200 clips) gets a
+# time box sized for them - Avatarity runs 4 tasks at a time, ~30 s a picture and ~90 s a clip - never past this.
+AI_FILL_MAX_SECONDS = float(os.getenv("AI_FILL_MAX_SECONDS", "2400"))
+# Avatarity (src/avatarity.py; the owner's flat plan, 2026-10-28): AI fill's pictures (Nano Banana Pro) and clips
+# (Veo 3.1 Lite 720p, image-to-video from each clip's own picture) go there first when AVATARITY_API_KEY is set;
+# its units are not dollars (the USD budget only covers OpenRouter: the look checks, the prompt writing and the
+# backup). "openrouter": the old chains only.
+AI_PROVIDER = (os.getenv("AI_PROVIDER", "avatarity").strip().lower() or "avatarity")
+AVATARITY_IMAGE_MODEL = os.getenv("AVATARITY_IMAGE_MODEL", "nano-banana-pro").strip()
+AVATARITY_VIDEO_MODEL = os.getenv("AVATARITY_VIDEO_MODEL", "veo-3.1-lite").strip()
+# 720p = 1 unit a clip, then our HD pass to 1080 (their "1080p" is a 1280x720 file for 2 units: 2026-11-01).
+AVATARITY_RESOLUTION = os.getenv("AVATARITY_RESOLUTION", "720p").strip()
+# Hard caps per video on the plan's allowance (a job may set lower ones); past them the rest goes to the backup.
+AVATARITY_MAX_VIDEO_UNITS = int(os.getenv("AVATARITY_MAX_VIDEO_UNITS", "260"))
+AVATARITY_MAX_IMAGES = int(os.getenv("AVATARITY_MAX_IMAGES", "650"))
+# How long one Veo task may take before the line falls back (tasks have sat queued 15-35 min on a busy account).
+AVATARITY_CLIP_TIMEOUT = float(os.getenv("AVATARITY_CLIP_TIMEOUT", "600"))
+# The shortest line an Avatarity clip is made for (one ~8 s clip is a plan unit whatever its screen time; the
+# OpenRouter backup, paid by the second, keeps CLIP_MIN_SCENE 2.5 s).
+AVATARITY_CLIP_MIN_SCENE = float(os.getenv("AVATARITY_CLIP_MIN_SCENE", "1.2"))
+# The OpenRouter backup when Avatarity fails or its allowance is gone (a job's block may switch it off:
+# "openrouter_fallback": false - a line Avatarity cannot make then keeps the ordinary last resort).
+AI_FILL_OPENROUTER_FALLBACK = _flag("AI_FILL_OPENROUTER_FALLBACK", True)
 
 # --- AI director -------------------------------------------------------------
 # Optional. Without it the rule-based planner in director.py runs alone.

@@ -526,10 +526,11 @@ def _ai_checkpoint(where: str, assets=None) -> None:
 
 
 def _ai_fill_budget(inp: dict) -> float:
-    """The AI fill block's own budget (src/aifill.py; 0 without one): it spends on the same OpenRouter account."""
+    """What the AI fill block may spend on the OpenRouter account (src/aifill.py; 0 without one): its whole budget,
+    or - on the Avatarity plan - only its look checks and prompt writing (the backup spends only what is there:
+    OpenRouter out of credit just ends it, so it never holds a video back)."""
     try:
-        b = aifill.block(inp)
-        return float((b or {}).get("budget_usd") or 0.0)
+        return aifill.openrouter_need(aifill.block(inp))
     except Exception:  # noqa: BLE001
         return 0.0
 
