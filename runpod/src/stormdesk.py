@@ -28,10 +28,18 @@ The flow inside the worker:
            picture's length checked against the timeline, and the per-video report completed.
 
 Job options (all optional) under inp["storm_desk"]: pauses ("auto" | a count | narration seconds | 0),
-pause_seconds (7), headlines (one per block, in order), location, date (as shown, "NOV 1, 2026"), event_date
-(ISO, for the ARCHIVE label), tab ("BREAKING NEWS"), subscribe (true), mirror ("off" | "auto"), blur_marks
-(true), lookalike (true), channel_name, logo_url, colors {logo, logo2, bar, bar2, tab, tab2, divider, place,
-date, pill, text}. inp["blocked_sources"]: channel names never used (adds to the owner's list).
+pause_seconds (7), open_clip (true: the video opens on a 4-7 s clip with its own sound before the narration),
+open_seconds (6), clip_sound ("ambient": clips whose own sound is natural play quietly under the narration,
+UNDER_VOICE_DB below the voice and ducked further on every word; "off": silent under the narration),
+headlines (one per block, in order), location, date (as shown, "NOV 1, 2026"), event_date (ISO, for the
+ARCHIVE label and the upload-date check), tab ("BREAKING NEWS"), subscribe (true), mirror ("off" | "auto"),
+blur_marks (true), lookalike (true), channel_name, logo_url (this video's logo; the brand kit's otherwise),
+colors {logo, logo2, bar, bar2, tab, tab2, divider, place, date, pill, text}. inp["blocked_sources"]: channel
+names never used (adds to the owner's list).
+
+What the editor may change after the plan (the render reads it from the timeline): doc.stormDesk.clipSound
+{"mode": "ambient" | "off"}, scene.clipSound (true / false: that clip's own choice, over the mode),
+doc.stormDesk.logo {"url", "text"}. Every clip's sound class is kept at scene.media.clipAudio (src/clipaudio.py).
 """
 from __future__ import annotations
 
@@ -68,6 +76,16 @@ MUSIC_UNDER_VOICE_DB = 21.0     # the user's own track under the narration (the 
 MUSIC_SPEECH_DUCK_DB = 3.0      # ... and this much lower while a word is spoken
 MASTER_LUFS, MASTER_TP = -14.0, -1.5
 SYNC_TOLERANCE = 0.25           # seconds the picture may differ from the timeline
+OPEN_SECONDS = 6.0              # the opening clip (the owner: 4-7 s of the most dramatic clip, its own sound)
+OPEN_MIN, OPEN_MAX = 4.0, 7.0
+UNDER_VOICE_DB = 20.0           # a natural-sound clip under the narration: this far below the voice (owner 18-22)
+UNDER_DUCK_DB = 6.0             # ... and this much lower again while a word is spoken
+UNDER_FADE = 0.12               # its fade at every cut (no click)
+UNDER_GAIN_MAX_DB = 12.0        # a very quiet clip is lifted at most this much (no hiss brought up)
+MIX_MARGIN_DB = 15.0            # the mix check: the clip sound under a word at least this far below the voice
+PAUSE_TRIES = 3                 # candidate clips fetched and scored for a pause (4 for the opening)
+PAUSE_SLACK = 4.0               # seconds fetched beyond the pause, to pick its best stretch
+CLIP_SOUND_MODES = ("ambient", "off")
 
 # The owner's blocklist (2026-11-02): never this channel's footage, in any storm desk video.
 DEFAULT_BLOCKLIST = ("Desert Rat Explorations",)
@@ -113,6 +131,27 @@ def is_style(inp: Optional[dict] = None, doc: Optional[dict] = None) -> bool:
 def options(inp: Optional[dict]) -> dict:
     raw = (inp or {}).get("storm_desk")
     return dict(raw) if isinstance(raw, dict) else {}
+
+
+def clip_sound_mode(opts: Optional[dict]) -> str:
+    """The job's clip sound under the narration: "ambient" (the default) or "off"."""
+    v = (opts or {}).get("clip_sound", "ambient")
+    if v is False or str(v).strip().lower() in ("off", "none", "0", "false", "silent"):
+        return "off"
+    return "ambient"
+
+
+def open_clip_on(opts: Optional[dict]) -> bool:
+    v = (opts or {}).get("open_clip", True)
+    return not (v is False or str(v).strip().lower() in ("off", "0", "false", "no"))
+
+
+def open_seconds(opts: Optional[dict]) -> float:
+    try:
+        v = float((opts or {}).get("open_seconds") or OPEN_SECONDS)
+    except (TypeError, ValueError):
+        v = OPEN_SECONDS
+    return max(OPEN_MIN, min(OPEN_MAX, v))
 
 
 def blocklist(inp: Optional[dict]) -> List[str]:
@@ -189,13 +228,25 @@ def plan_pauses(words: Sequence, duration: float, opts: Optional[dict] = None) -
     most dramatic sentence end near its share of the narration (the hook's end, a rescue, a record), never
     before PAUSE_FIRST_MIN or in the last PAUSE_TAIL seconds, never closer than PAUSE_MIN_GAP to another.
     A list of seconds places them by hand (snapped to the nearest sentence end); 0 / "off" = none.
+    With open_clip (the default) the first one is the opening clip: at narration second 0, open_seconds long,
+    {"open": true} - the video starts on a clip and its own sound, then the narration begins.
     """
     opts = opts or {}
+    words = list(words or [])
+    if not words or duration <= 0:
+        return []
+    mid = _mid_pauses(words, opts)
+    if open_clip_on(opts):
+        return [{"at": 0.0, "secs": open_seconds(opts), "sentence": "", "open": True}] + mid
+    return mid
+
+
+def _mid_pauses(words: list, opts: dict) -> List[dict]:
+    """plan_pauses' natural-sound pauses in the narration (not the opening clip)."""
     want = opts.get("pauses", "auto")
     secs = float(opts.get("pause_seconds") or PAUSE_SECONDS)
     secs = max(3.0, min(15.0, secs))
-    words = list(words or [])
-    if not words or want in (0, "0", "off", False, "none") or duration <= 0:
+    if want in (0, "0", "off", False, "none"):
         return []
     sents = sentences(words)
     end_of_talk = _we(words[-1])
@@ -253,7 +304,8 @@ def out_pauses(pauses: Sequence[dict]) -> List[dict]:
     out, added = [], 0.0
     for p in sorted(pauses, key=lambda x: float(x["at"])):
         t0 = float(p["at"]) + added
-        out.append({"t0": round(t0, 3), "t1": round(t0 + float(p["secs"]), 3), "sentence": p.get("sentence", "")})
+        out.append({"t0": round(t0, 3), "t1": round(t0 + float(p["secs"]), 3), "sentence": p.get("sentence", ""),
+                    **({"open": True} if p.get("open") else {})})
         added += float(p["secs"])
     return out
 
@@ -278,10 +330,12 @@ def pad_narration(src: str, pauses: Sequence[dict], out: str, sr: int = 48000) -
     parts, labels, prev = [], [], 0.0
     for k, p in enumerate(ps):
         at = float(p["at"])
-        parts.append(f"[0:a]atrim=start={prev:.4f}:end={at:.4f},asetpts=PTS-STARTPTS,"
-                     f"aresample={sr},aformat=channel_layouts=stereo[a{k}]")
+        if at - prev > 0.001:               # (the opening clip's silence comes before any narration)
+            parts.append(f"[0:a]atrim=start={prev:.4f}:end={at:.4f},asetpts=PTS-STARTPTS,"
+                         f"aresample={sr},aformat=channel_layouts=stereo[a{k}]")
+            labels.append(f"[a{k}]")
         parts.append(f"anullsrc=r={sr}:cl=stereo,atrim=duration={float(p['secs']):.4f}[s{k}]")
-        labels += [f"[a{k}]", f"[s{k}]"]
+        labels.append(f"[s{k}]")
         prev = at
     parts.append(f"[0:a]atrim=start={prev:.4f},asetpts=PTS-STARTPTS,aresample={sr},"
                  f"aformat=channel_layouts=stereo[tail]")
@@ -420,6 +474,38 @@ def event_date(text: str, opts: dict, today: Optional[datetime.date] = None) -> 
     if d > today + datetime.timedelta(days=2):
         d = d.replace(year=today.year - 1)
     return d
+
+
+EVENT_DAY_RECENT = 45           # a date the narration says counts as the event's day only this recent
+
+
+def event_day_for(inp: dict, words: Sequence = (), today: Optional[datetime.date] = None) -> Optional[datetime.date]:
+    """
+    The day the sourcing holds an event line's footage to (media.set_event_day: nothing uploaded before it):
+    the job's event_date, else a "Month day" the opening of the narration says when it is within the last
+    EVENT_DAY_RECENT days and no other year follows it ("July 4th, 1983" is history, not this event). None =
+    the story-year rule only.
+    """
+    opts = options(inp)
+    today = today or datetime.date.today()
+    raw = str(opts.get("event_date") or "").strip()
+    if raw:
+        try:
+            return datetime.date.fromisoformat(raw[:10])
+        except ValueError:
+            pass
+    text = " ".join(_text(w).strip() for w in list(words or [])[:220])
+    m = _MONTH_RE.search(text)
+    if not m:
+        return None
+    after = text[m.end():m.end() + 12]
+    y = re.match(r"\s*,?\s*(\d{4})\b", after)
+    if y and int(y.group(1)) not in (today.year, today.year - 1):
+        return None
+    day = event_date(text, {}, today)
+    if day is None or day > today + datetime.timedelta(days=2) or (today - day).days > EVENT_DAY_RECENT:
+        return None
+    return day
 
 
 def archive(scene: dict, day: Optional[datetime.date], brief: Optional[dict]) -> bool:
@@ -796,6 +882,70 @@ def _default_check(path: str) -> str:
         return ""
 
 
+def source_title(scene: dict) -> str:
+    """The upload's title as the search gave it (the YouTube attribution "YouTube: <title>"), or ''."""
+    att = str((scene.get("media") or {}).get("attribution") or "")
+    return re.sub(r"^(youtube|dailymotion)\s*[:—-]\s*", "", att, flags=re.I)[:200]
+
+
+def _relevance(scene: dict) -> float:
+    """The judge's relevance for the shot's clip, 0..1 (0.5 when unknown)."""
+    v = _sm(scene).get("relevanceScore")
+    if isinstance(v, (int, float)) and not isinstance(v, bool):
+        return max(0.0, min(1.0, float(v) / 10.0 if v > 1.0 else float(v)))
+    return 0.5
+
+
+def pause_score(path: str, secs: float, title: str = "", relevance: float = 0.5,
+                classify: Optional[Callable] = None) -> Optional[dict]:
+    """
+    How good a fetched clip is as a natural-sound pause, and its best `secs`-long stretch: {"score", "offset",
+    "audio" (clipaudio.classify), "energy", "motion"} or {"reject": why}. Strong, lively natural sound (its level
+    and its swings: rushing water, gusts, crashing, sirens) and motion score; relevance (the judge's) helps;
+    music never plays in a pause (the hand-made videos swapped such clips for real water), silence neither; an
+    eyewitness talking is allowed, a little lower. None = unreadable.
+    """
+    try:
+        import numpy as np
+        from . import clipaudio
+    except ImportError:
+        return None
+    x = clipaudio.read_mono(path)
+    info = (classify or clipaudio.classify)(path, title=title, x=x)
+    kind = info.get("kind")
+    if kind in ("music", "silent", "unknown"):
+        return {"reject": f"its sound is {kind}", "audio": info}
+    sr = clipaudio.SR
+    blk = int(0.25 * sr)
+    nb = len(x) // blk if x is not None else 0
+    if nb < 4:
+        return None
+    db = 20 * np.log10(np.sqrt(np.mean(x[: nb * blk].reshape(nb, blk) ** 2, axis=1)) + 1e-9)
+    total = nb * 0.25
+    win = max(1, int(round(min(secs, total) / 0.25)))
+    # Motion: grey change between frames 0.5 s apart over the whole fetched clip.
+    fr = frames(path, 0.0, total, n=max(4, int(total * 2)), w=160, h=90)
+    mot = []
+    for i in range(1, len(fr)):
+        mot.append(float(np.mean(np.abs(fr[i].astype(np.float32) - fr[i - 1].astype(np.float32)))))
+    best = None
+    for o in range(0, max(1, nb - win + 1)):
+        w = db[o:o + win]
+        energy = max(0.0, min(1.0, (float(np.mean(w)) + 45.0) / 30.0))
+        swing = max(0.0, min(1.0, float(np.std(w)) / 8.0))
+        if mot:
+            a = int(o * 0.25 * 2)
+            m = mot[a:a + max(1, int(win * 0.25 * 2))] or mot
+            motion = max(0.0, min(1.0, float(np.mean(m)) / 12.0))
+        else:
+            motion = 0.3
+        score = 0.40 * energy + 0.15 * swing + 0.30 * motion + 0.15 * relevance - 0.15 * float(info.get("speech") or 0.0)
+        if best is None or score > best[0]:
+            best = (score, o * 0.25, energy, motion)
+    return {"score": round(best[0], 3), "offset": round(best[1], 2), "energy": round(best[2], 3),
+            "motion": round(best[3], 3), "audio": info}
+
+
 def make_pauses(doc: dict, pauses: List[dict], work: str, fetch: Optional[Callable] = None,
                 frame_vertical: Optional[Callable[[str], bool]] = None,
                 check: Optional[Callable[[str], str]] = None) -> List[dict]:
@@ -824,9 +974,16 @@ def make_pauses(doc: dict, pauses: List[dict], work: str, fetch: Optional[Callab
         inside = [s for s in scenes if int(s["startFrame"]) < p1 and _end(s) > p0]
         prev_key = source_key(before[-1]) if before else ""
         next_key = source_key(after[0]) if after else ""
-        # Who the pause may come from: the shots in its window first, then the block before it, nearest first.
-        pool = inside + list(reversed([s for s in scenes if p0 - 60 * fps <= _end(s) <= p0]))
-        seen, path, src = set(), "", None
+        is_open = bool(p.get("open"))
+        secs = float(p["t1"] - p["t0"])
+        # Who the pause may come from: the shots in its window first, then the block before it, nearest first,
+        # then just after it. The opening clip: any source of the video, the most relevant first.
+        if is_open:
+            pool = sorted([s for s in scenes if not is_ai(s)], key=lambda s: -_relevance(s))
+        else:
+            pool = inside + list(reversed([s for s in scenes if p0 - 90 * fps <= _end(s) <= p0])) +                 [s for s in scenes if p1 <= int(s["startFrame"]) <= p1 + 30 * fps]
+        tries: List[Tuple[dict, str, float]] = []
+        seen: set = set()
         for c in pool:
             mo = moment(c, fps)
             if not mo or mo[0] in seen:
@@ -835,42 +992,68 @@ def make_pauses(doc: dict, pauses: List[dict], work: str, fetch: Optional[Callab
             key = source_key(c)
             if key and key in (prev_key, next_key):
                 continue                        # never two shots in a row from one source
-            want = float(p["t1"] - p["t0"]) + 1.0
+            want = secs + PAUSE_SLACK
             start = pause_start(used.get(mo[0], []), want, video_seconds(mo[0]), gap)
             if start is None:
                 continue
+            tries.append((c, mo[0], start))
+            if len(tries) >= (PAUSE_TRIES + 1 if is_open else PAUSE_TRIES):
+                break
+        path, src, best, scored = "", None, None, []
+
+        def fetch_one(t: Tuple[dict, str, float]):
+            c, vid, start = t
             try:
-                got = fetch(mo[0], start, want)
+                got = fetch(vid, start, secs + PAUSE_SLACK)
             except Exception as e:  # noqa: BLE001
                 print(f"[stormdesk] pause {k + 1}: {type(e).__name__}: {str(e)[:120]}", flush=True)
-                got = ""
+                return t, "", None
             if not got or not _audible(got):
-                continue
+                return t, "", None
+            title = source_title(c)
+            sc = pause_score(got, secs, title=title, relevance=_relevance(c))
+            if sc is None or sc.get("reject"):
+                print(f"[stormdesk] pause {k + 1}: {vid} @ {start:.0f}s turned down: "
+                      f"{(sc or {}).get('reject') or 'unreadable'}", flush=True)
+                return t, "", None
             why = check(got)
             if why:
-                print(f"[stormdesk] pause {k + 1}: {mo[0]} @ {start:.0f}s turned down: {why}", flush=True)
-                continue
+                print(f"[stormdesk] pause {k + 1}: {vid} @ {start:.0f}s turned down: {why}", flush=True)
+                return t, "", None
+            return t, got, sc
+        if tries:
+            with ThreadPoolExecutor(min(3, len(tries))) as ex:
+                results = list(ex.map(fetch_one, tries))
+            for t, got, sc in results:
+                if got and sc is not None:
+                    scored.append({"video": t[1], "at": round(t[2], 1), "score": sc["score"]})
+                    if best is None or sc["score"] > best[2]["score"]:
+                        best = (t, got, sc)
+        if best is not None:
+            (c, vid, start), path, sc = best
             if frame_vertical is not None:
                 try:
-                    frame_vertical(got)
+                    frame_vertical(path)
                 except Exception:  # noqa: BLE001 - shown as downloaded
                     pass
-            path, src = got, (c, mo[0], start)
-            break
+            src = (c, vid, start, sc)
         row = {"t0": p["t0"], "t1": p["t1"], "sentence": p.get("sentence", "")[:120]}
         if not path:
             for s in inside:
                 s["natSoundWanted"] = True
             row["clip"] = None
             row["why"] = "no source clip with sound could be fetched; the plan's shots stay (music only)"
+            if is_open:
+                row["open"] = True
             rows.append(row)
             continue
-        donor, vid, start = src
+        donor, vid, start, sc = src
+        offset = float(sc.get("offset") or 0.0)
         info = _probe(path)
         sm = dict(_sm(donor))
         sm.update({"sourceUrl": f"https://www.youtube.com/watch?v={vid[3:]}&t={int(start)}",
                    "moment": {"start": round(start, 2)}, "assetId": f"{vid}@{int(start)}",
-                   "intent": "natural sound pause", "alternatives": []})
+                   "intent": "opening clip" if is_open else "natural sound pause", "alternatives": []})
         pause = {
             "id": f"pause{k + 1}", "startFrame": p0, "durationInFrames": p1 - p0, "text": "",
             "visualType": "footage", "motion": "none", "treatment": "none", "transition": "none",
@@ -878,8 +1061,10 @@ def make_pauses(doc: dict, pauses: List[dict], work: str, fetch: Optional[Callab
             "media": {"type": "video", "url": path, "source": (donor.get("media") or {}).get("source", "youtube"),
                       "attribution": (donor.get("media") or {}).get("attribution", ""),
                       "license": (donor.get("media") or {}).get("license", ""),
-                      "clipSeconds": round(info.get("duration") or (p1 - p0) / fps, 3)},
+                      "clipSeconds": round(info.get("duration") or (p1 - p0) / fps, 3),
+                      "trimStart": round(offset, 3), "clipAudio": sc.get("audio") or {}},
             "semanticMetadata": sm, "reviewRequired": False, "reviewReason": "",
+            **({"openClip": True} if is_open else {}),
         }
         # The window: shots inside go, shots across its edges are trimmed to it.
         keep: List[dict] = []
@@ -915,11 +1100,17 @@ def make_pauses(doc: dict, pauses: List[dict], work: str, fetch: Optional[Callab
             elif int(s["startFrame"]) == p1:
                 pause["durationInFrames"] += int(s["durationInFrames"])
                 keep.remove(s)
+        head = p0 - int(pause["startFrame"])
+        if head > 0:                                    # a sliver before it joined: the clip starts that much earlier
+            pause["media"]["trimStart"] = round(max(0.0, offset - head / float(fps)), 3)
         keep.append(pause)
         keep.sort(key=lambda s: int(s["startFrame"]))
         scenes[:] = keep
-        used.setdefault(vid, []).append((start, start + (p1 - p0) / fps))
-        row.update({"clip": path, "source": credit_name(donor), "video": vid, "at": round(start, 1)})
+        t_in = start + float(pause["media"]["trimStart"])
+        used.setdefault(vid, []).append((t_in, t_in + int(pause["durationInFrames"]) / float(fps)))
+        row.update({"clip": path, "source": credit_name(donor), "video": vid, "at": round(t_in, 1),
+                    "score": sc.get("score"), "sound": (sc.get("audio") or {}).get("kind"),
+                    "candidates": scored, **({"open": True} if is_open else {})})
         rows.append(row)
     return rows
 
@@ -1169,7 +1360,8 @@ def graphics(doc: dict, inp: dict, blocks: List[dict], brief: Optional[dict], ki
     if isinstance(inp.get("channel_watermark"), dict):
         name = str(opts.get("channel_name") or inp["channel_watermark"].get("text") or "").strip()
     return {"version": 1, "colors": colors(inp, kit), "logo": {"url": logo_url, "text": name[:24]},
-            "bug": {"opacity": 0.9}, "lowerThirds": lts, "location": loc, "subscribe": subs, "credits": True}
+            "bug": {"opacity": 0.9}, "lowerThirds": lts, "location": loc, "subscribe": subs, "credits": True,
+            "clipSound": {"mode": clip_sound_mode(opts), "underVoiceDb": UNDER_VOICE_DB, "duckDb": UNDER_DUCK_DB}}
 
 
 def music_level(doc: dict) -> Optional[dict]:
@@ -1265,7 +1457,13 @@ def finish(doc: dict, inp: dict, brief: Optional[dict] = None, work: str = "", f
 
     # Credits, ARCHIVE labels, AI labels.
     text = " ".join(str(w.get("text") or "") for s in doc["scenes"][:40] for w in s.get("words") or [])
-    day = event_date(text, opts)
+    day = None
+    if inp.get("_event_day"):
+        try:
+            day = datetime.date.fromisoformat(str(inp["_event_day"])[:10])
+        except ValueError:
+            day = None
+    day = day or event_date(text, opts)
     rep["eventDate"] = day.isoformat() if day else None
     n_arch = 0
     for s in doc["scenes"]:
@@ -1315,6 +1513,15 @@ def finish(doc: dict, inp: dict, brief: Optional[dict] = None, work: str = "", f
         if not fr:
             return
         thumbs[i] = fr[1 if len(fr) > 1 else 0]
+        if not s.get("natSound"):
+            # What its own sound is (src/clipaudio.py): only natural sound plays under the narration.
+            try:
+                from . import clipaudio
+                m["clipAudio"] = clipaudio.classify(path, float(m.get("trimStart") or 0.0),
+                                                    int(s["durationInFrames"]) / fps, title=source_title(s))
+                m["clipAudio"].pop("parts", None)
+            except Exception:  # noqa: BLE001 - unknown: silent under the voice
+                m["clipAudio"] = {"kind": "unknown"}
         if clip_ok:
             try:
                 import numpy as np
@@ -1355,6 +1562,18 @@ def finish(doc: dict, inp: dict, brief: Optional[dict] = None, work: str = "", f
         doc["scenes"][j]["reviewRequired"] = True
         doc["scenes"][j]["reviewReason"] = f"looks like shot #{i} (CLIP {c:.2f}): swap one of them"
         doc["scenes"][j]["stormDeskIssue"] = "lookalike"
+    mode = clip_sound_mode(opts)
+    kinds: Dict[str, int] = {}
+    for s in doc["scenes"]:
+        if (s.get("media") or {}).get("type") == "video" and not s.get("natSound"):
+            k = str(((s["media"].get("clipAudio") or {}).get("kind")) or "unknown")
+            kinds[k] = kinds.get(k, 0) + 1
+    try:
+        from . import clipaudio
+        under = sum(1 for s in doc["scenes"] if clipaudio.plays_under_voice(s, mode))
+    except Exception:  # noqa: BLE001
+        under = 0
+    rep["clipSound"] = {"mode": mode, "kinds": kinds, "underVoice": under}
     rep["lookalikeCheck"] = "clip" if clip_ok else "off"
     rep["lookalikes"] = same[:40]
 
@@ -1490,6 +1709,153 @@ def nat_track(doc: dict, total: float, offset: float, sr: int = 48000, resolve: 
     return track, rows
 
 
+def word_spans(doc: dict) -> List[Tuple[float, float]]:
+    """The narration's words on the video's clock (seconds), merged where under 0.25 s apart."""
+    spans = sorted((float(w.get("start", 0)), float(w.get("end", 0))) for s in doc.get("scenes") or []
+                   for w in s.get("words") or [] if float(w.get("end", 0)) > float(w.get("start", 0)))
+    out: List[List[float]] = []
+    for a, b in spans:
+        if out and a - out[-1][1] < 0.25:
+            out[-1][1] = max(out[-1][1], b)
+        else:
+            out.append([a, b])
+    return [(a, b) for a, b in out]
+
+
+def under_gain(clip_db: float, voice_db: float, below: float = UNDER_VOICE_DB) -> float:
+    """The linear gain that puts a clip measured at `clip_db` (gated RMS) `below` dB under a voice at
+    `voice_db`, never lifting it more than UNDER_GAIN_MAX_DB."""
+    want = float(voice_db) - float(below)
+    return float(10 ** (min(UNDER_GAIN_MAX_DB, want - float(clip_db)) / 20.0))
+
+
+def under_track(doc: dict, total: float, offset: float, voice_db: float, sr: int = 48000,
+                resolve: Optional[Callable] = None, read: Optional[Callable] = None):
+    """
+    The narration shots' own sound under the voice (clip_sound "ambient", the editor's switches:
+    clipaudio.plays_under_voice): each clip that plays set UNDER_VOICE_DB under the voice (from its own
+    measured level), faded UNDER_FADE at its cut, and UNDER_DUCK_DB lower again while a word is spoken (a
+    0.15 s ramp). Returns (samples N x 2 float32, rows, speech mask N float32 0..1).
+    """
+    import numpy as np
+    from . import clipaudio
+    fps = int(doc.get("fps") or 30)
+    n = int(round(total * sr)) + sr
+    track = np.zeros((n, 2), np.float32)
+    talk = np.zeros(n, np.float32)
+    for a, b in word_spans(doc):
+        i0, i1 = max(0, int((a + offset - 0.05) * sr)), min(n, int((b + offset + 0.05) * sr))
+        talk[i0:i1] = 1.0
+    k = max(1, int(0.15 * sr))
+    talk_s = np.convolve(talk, np.ones(k, np.float32) / k, mode="same")
+    duck = 1.0 - (1.0 - 10 ** (-UNDER_DUCK_DB / 20.0)) * np.clip(talk_s, 0, 1)
+    mode = str((((doc.get("stormDesk") or {}).get("clipSound")) or {}).get("mode") or "off")
+    below = float((((doc.get("stormDesk") or {}).get("clipSound")) or {}).get("underVoiceDb") or UNDER_VOICE_DB)
+    below = max(12.0, min(30.0, below))
+    todo = [s for s in doc.get("scenes") or [] if (s.get("media") or {}).get("type") == "video"
+            and clipaudio.plays_under_voice(s, mode)]
+    rows: List[dict] = []
+    reader = read or (lambda src, at, secs: _read_audio(src, at, secs, sr))
+
+    def one(s: dict):
+        url = str((s.get("media") or {}).get("url") or "")
+        src = resolve(url) if resolve else url
+        t0 = int(s["startFrame"]) / fps
+        secs = int(s["durationInFrames"]) / fps
+        if not src or secs < 0.2:
+            return s, t0, None
+        try:
+            return s, t0, reader(src, float((s.get("media") or {}).get("trimStart") or 0.0), secs)
+        except Exception:  # noqa: BLE001 - this clip stays silent
+            return s, t0, None
+    with ThreadPoolExecutor(6) as ex:
+        got = list(ex.map(one, todo))
+    for s, t0, x in got:
+        if x is None or not len(x):
+            rows.append({"id": s.get("id"), "at": round(t0, 2), "ok": False})
+            continue
+        mono = x.mean(axis=1)
+        blk = max(1, int(0.05 * sr))
+        nb = len(mono) // blk
+        if nb >= 4:
+            rms = np.sort(np.sqrt(np.mean(mono[: nb * blk].reshape(nb, blk) ** 2, axis=1)))[int(nb * 0.3):]
+            db = float(20 * np.log10(np.sqrt(np.mean(rms ** 2)) + 1e-9))
+        else:
+            db = float(20 * np.log10(np.sqrt(np.mean(mono ** 2)) + 1e-9))
+        if db < -60.0:
+            rows.append({"id": s.get("id"), "at": round(t0, 2), "ok": False, "why": "silent"})
+            continue
+        g = under_gain(db, voice_db, below)
+        o = int(round((t0 + offset) * sr))
+        m = min(len(x), int(round(int(s["durationInFrames"]) / fps * sr)), n - o)
+        if m <= 0:
+            continue
+        env = np.ones(m, np.float32)
+        r = min(m // 2, int(UNDER_FADE * sr))
+        if r:
+            env[:r] = np.linspace(0, 1, r)
+            env[-r:] = np.linspace(1, 0, r)
+        track[o:o + m] += x[:m] * (env * g * duck[o:o + m])[:, None]
+        rows.append({"id": s.get("id"), "at": round(t0, 2), "ok": True, "db": round(db, 1),
+                     "gainDb": round(20 * math.log10(max(1e-9, g)), 1)})
+    return track, rows, talk
+
+
+def _voice_level(base, spans: List[Tuple[float, float]], offset: float, sr: int = 48000) -> float:
+    """The narration's level (RMS dBFS) in the drawn file while its words are spoken."""
+    import numpy as np
+    mono = base.mean(axis=1) if getattr(base, "ndim", 1) == 2 else base
+    parts = [mono[max(0, int((a + offset) * sr)):int((b + offset) * sr)] for a, b in spans]
+    parts = [p for p in parts if len(p)]
+    if not parts:
+        return -20.0
+    x = np.concatenate(parts)
+    return float(20 * np.log10(np.sqrt(np.mean(x ** 2)) + 1e-9))
+
+
+def classify_missing(doc: dict, resolve: Optional[Callable] = None) -> int:
+    """A narration clip with no sound class yet (one swapped in the editor after the plan): read and classed now
+    (src/clipaudio.py), so the mix knows whether it may play under the voice. Returns how many."""
+    from . import clipaudio
+    fps = int(doc.get("fps") or 30)
+    mode = str((((doc.get("stormDesk") or {}).get("clipSound")) or {}).get("mode") or "off")
+    todo = [s for s in doc.get("scenes") or [] if (s.get("media") or {}).get("type") == "video"
+            and not s.get("natSound") and not isinstance((s.get("media") or {}).get("clipAudio"), dict)
+            and (mode == "ambient" or s.get("clipSound") is True)]
+
+    def one(s: dict) -> None:
+        m = s["media"]
+        url = str(m.get("url") or "")
+        src = resolve(url) if resolve else url
+        got = clipaudio.classify(src, float(m.get("trimStart") or 0.0), int(s["durationInFrames"]) / fps,
+                                 title=source_title(s), confirm=False)
+        got.pop("parts", None)
+        m["clipAudio"] = got
+    if todo:
+        with ThreadPoolExecutor(6) as ex:
+            list(ex.map(one, todo))
+    return len(todo)
+
+
+def mix_check(base, under, talk, sr: int = 48000) -> dict:
+    """Level of the clip sound under the narration vs the narration (+ music) itself, while a word is spoken:
+    the laptop's mixcheck.py on the worker. ok = the clip sound sits at least MIX_MARGIN_DB under the voice."""
+    import numpy as np
+    n = min(len(base), len(under), len(talk))
+    if n <= 0:
+        return {"ok": True, "underVoiceDb": None}
+    on = talk[:n] > 0.5
+
+    def db(x):
+        return float(20 * np.log10(np.sqrt(np.mean(x ** 2)) + 1e-9)) if len(x) else -120.0
+    if not on.any():
+        return {"ok": True, "underVoiceDb": None}
+    v = db(base[:n][on])
+    c = db(under[:n][on])
+    return {"ok": bool(c <= v - MIX_MARGIN_DB), "voiceDb": round(v, 1), "clipDb": round(c, 1),
+            "underVoiceDb": round(c - v, 1)}
+
+
 def _duration(path: str, stream: str) -> float:
     try:
         out = subprocess.run(["ffprobe", "-v", "error", "-select_streams", f"{stream}:0", "-show_entries",
@@ -1542,6 +1908,25 @@ def after_render(doc: dict, out_path: str, work: str, resolve: Optional[Callable
     mix[:len(base)] += base
     m = min(n, len(nat))
     mix[:m] += nat[:m]
+    # The clips' own sound under the narration (clip_sound "ambient" and the editor's switches).
+    try:
+        rep["classifiedAtRender"] = classify_missing(doc, resolve)
+        voice_db = _voice_level(base, word_spans(doc), intro / float(fps), sr)
+        under, urows, talk = under_track(doc, total, intro / float(fps), voice_db, sr, resolve)
+        rep["underVoice"] = {"mode": str(((doc.get("stormDesk") or {}).get("clipSound") or {}).get("mode") or "off"),
+                             "clips": sum(1 for r in urows if r.get("ok")), "rows": urows[:200],
+                             "voiceDb": round(voice_db, 1)}
+        if any(r.get("ok") for r in urows):
+            rep["mixCheck"] = mix_check(base.mean(axis=1), under[:len(base)].mean(axis=1), talk[:len(base)], sr)
+            if not rep["mixCheck"]["ok"]:
+                # Never over the voice: brought down to the margin rather than shipped too loud.
+                k = 10 ** ((rep["mixCheck"]["voiceDb"] - MIX_MARGIN_DB - rep["mixCheck"]["clipDb"]) / 20.0)
+                under *= np.float32(k)
+                rep["mixCheck"]["loweredDb"] = round(20 * math.log10(max(1e-9, k)), 1)
+            m = min(n, len(under))
+            mix[:m] += under[:m]
+    except Exception as e:  # noqa: BLE001 - the video ships with clips silent under the voice
+        rep["underVoice"] = {"error": f"{type(e).__name__}: {str(e)[:160]}"}
     mix = mix[: int(round(total * sr))]
     wav = os.path.join(work, "stormdesk_mix.wav")
     with wave.open(wav, "wb") as w:

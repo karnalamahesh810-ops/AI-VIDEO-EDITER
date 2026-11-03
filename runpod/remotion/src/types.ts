@@ -257,6 +257,18 @@ export interface SceneMedia {
    */
   html5?: boolean;
   /**
+   * The Breaking News Desk style: what the clip's own sound is (measured by the worker; on the media so it travels
+   * with the clip when shots are swapped): nature (water, wind, sirens, crowds), speech, music, silent or unknown,
+   * with the speech / music shares and the level in dB when measured.
+   */
+  clipAudio?: { kind: "nature" | "speech" | "music" | "silent" | "unknown"; speech?: number; music?: number; db?: number };
+  /**
+   * The editor's preview only (timeline/ScenePreview.tsx sets it on its copy of the document, never saved): the
+   * clip's own sound level, 0-1, when the preview plays the clip file itself. Absent = muted, as every render does
+   * (the worker mixes the clips' sound in after the render).
+   */
+  volume?: number;
+  /**
    * The editor's in-point (the pro editor, edit/clipTime.ts): seconds into this clip file the scene starts at
    * - a slip, the second half of a split, a rolled cut. Absent = the file's first frame, as before.
    */
@@ -339,6 +351,14 @@ export interface Scene {
    */
   credit?: { text: string; archive?: boolean; ai?: boolean };
   natSound?: boolean;
+  /**
+   * The Breaking News Desk style: the opening clip (the video starts on it with its own sound before the narration;
+   * the worker also sets natSound on it), and the editor's per-clip choice for its sound under the voice - true
+   * plays it, false keeps it silent, absent = auto (it plays iff doc.stormDesk.clipSound.mode is "ambient" and
+   * media.clipAudio.kind is "nature"). An explicit true / false wins over the whole-video mode.
+   */
+  openClip?: boolean;
+  clipSound?: boolean;
 }
 
 /** One row of a chart, comparison or timeline. */
@@ -651,6 +671,11 @@ export interface StormDeskDoc {
   location?: { startFrame: number; durationInFrames: number; place: string; date: string } | null;
   subscribe?: { startFrame: number; durationInFrames: number }[];
   credits?: boolean;
+  /**
+   * The clips' own sound under the narration: "ambient" (nature clips play quietly under the voice, at underVoiceDb,
+   * ducked by duckDb) or "off" (none, unless a clip says scene.clipSound true). Pause clips always play.
+   */
+  clipSound?: { mode: "ambient" | "off"; underVoiceDb?: number; duckDb?: number };
 }
 
 export interface TimelineProps {

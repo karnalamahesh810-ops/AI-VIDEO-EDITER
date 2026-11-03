@@ -21,9 +21,15 @@ import { ClipFx } from "../edit/ClipFx";
  * (Windows Smart App Control on the owner's laptop, 2026-10-07). Sound always off: the narration is the sound.
  */
 const ClipVideo: React.FC<{ src: string; style?: React.CSSProperties; playbackRate?: number; html5?: boolean;
-  trimBefore?: number }> = ({ src, style, playbackRate, html5, trimBefore }) => (html5
-  ? <Video src={src} style={style} muted playbackRate={playbackRate} trimBefore={trimBefore} />
-  : <OffthreadVideo src={src} style={style} muted playbackRate={playbackRate} trimBefore={trimBefore} />);
+  trimBefore?: number; volume?: number }> = ({ src, style, playbackRate, html5, trimBefore, volume }) => {
+  // `volume` is set only by the app editor's preview (media.volume on its own copy; the Breaking News Desk clips'
+  // sound under the voice): every render leaves it out, so its clips stay muted as before.
+  const level = typeof volume === "number" && Number.isFinite(volume) && volume > 0 ? Math.min(1, volume) : 0;
+  const sound = level > 0 ? { volume: level } : { muted: true };
+  return html5
+    ? <Video src={src} style={style} {...sound} playbackRate={playbackRate} trimBefore={trimBefore} />
+    : <OffthreadVideo src={src} style={style} {...sound} playbackRate={playbackRate} trimBefore={trimBefore} />;
+};
 
 /**
  * A clip played by its plan (../edit/clipTime.ts): one stretch - the clip from its in-point at one speed,
@@ -31,18 +37,18 @@ const ClipVideo: React.FC<{ src: string; style?: React.CSSProperties; playbackRa
  * (mounted a second early in the editor's Player so its picture is there on its first frame).
  */
 const PlannedVideo: React.FC<{ src: string; style?: React.CSSProperties; plan: ClipSegment[]; html5?: boolean;
-  wrap?: React.CSSProperties }> = ({ src, style, plan, html5, wrap }) => {
+  wrap?: React.CSSProperties; volume?: number }> = ({ src, style, plan, html5, wrap, volume }) => {
   const { fps } = useVideoConfig();
   if (plan.length <= 1) {
     const s = plan[0];
-    return <ClipVideo src={src} style={style} playbackRate={s ? s.rate : 1} html5={html5}
+    return <ClipVideo src={src} style={style} playbackRate={s ? s.rate : 1} html5={html5} volume={volume}
       trimBefore={s && s.trimBefore > 0 ? s.trimBefore : undefined} />;
   }
   return (
     <>
       {plan.map((s, i) => (
         <Sequence key={i} from={s.from} durationInFrames={s.frames} premountFor={Math.round(fps)} style={wrap}>
-          <ClipVideo src={src} style={style} playbackRate={s.rate} html5={html5}
+          <ClipVideo src={src} style={style} playbackRate={s.rate} html5={html5} volume={volume}
             trimBefore={s.trimBefore > 0 ? s.trimBefore : undefined} />
         </Sequence>
       ))}
@@ -154,7 +160,7 @@ export const SceneClip: React.FC<{
         <AbsoluteFill style={{ backgroundColor: "#000", flexDirection: "row" }}>
           {grade?.defs}
           <div style={half}>
-            <PlannedVideo src={media.url} plan={plan} html5={media.html5}
+            <PlannedVideo src={media.url} plan={plan} html5={media.html5} volume={media.volume}
               style={{ ...fill, objectPosition: `${split.focusX ?? 50}% 50%` }} />
           </div>
           <div style={half}>
@@ -186,7 +192,7 @@ export const SceneClip: React.FC<{
             title={(scene.treatment === "archival" || scene.treatment === "vintage") ? "Archive film" : "Video player"}>
             <ClipFx fx={scene} still={media.type !== "video"} over={<FilmLayer treatment={treatment} />}>
               {media.type === "video" ? (
-                <PlannedVideo src={media.url} style={media100} plan={plan} html5={media.html5} />
+                <PlannedVideo src={media.url} style={media100} plan={plan} html5={media.html5} volume={media.volume} />
               ) : (
                 <SafeImg src={media.url} style={media100} fallback={hold} />
               )}
@@ -239,7 +245,7 @@ export const SceneClip: React.FC<{
             }}
           >
             {media.type === "video" ? (
-              <PlannedVideo src={media.url} style={inset} plan={plan} html5={media.html5}
+              <PlannedVideo src={media.url} style={inset} plan={plan} html5={media.html5} volume={media.volume}
                 wrap={{ justifyContent: "center", alignItems: "center" }} />
             ) : (
               <SafeImg src={media.url} style={inset} fallback={hold} />
@@ -282,10 +288,10 @@ export const SceneClip: React.FC<{
           {media.type === "video" ? (
             moved ? (
               <AbsoluteFill style={moved}>
-                <PlannedVideo src={media.url} style={fill} plan={plan} html5={media.html5} />
+                <PlannedVideo src={media.url} style={fill} plan={plan} html5={media.html5} volume={media.volume} />
               </AbsoluteFill>
             ) : (
-              <PlannedVideo src={media.url} style={fill} plan={plan} html5={media.html5} />
+              <PlannedVideo src={media.url} style={fill} plan={plan} html5={media.html5} volume={media.volume} />
             )
           ) : moved ? (
             // A still the editor framed by hand: the boxes replace its motion.
