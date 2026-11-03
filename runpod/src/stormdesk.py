@@ -990,6 +990,194 @@ def blurred_sides(fr: list) -> float:
     return round(share, 3) if 0.25 <= share <= 0.85 else 0.0
 
 
+# --------------------------------------------------------------------------- #
+# Clean shots (the owner, 2026-11-03): no clip carrying other outlets' text - banners, lower thirds, tickers,
+# captions, "NEW VIDEO" cards - and none shot through dirty or rainy glass when a clearer one exists.
+# --------------------------------------------------------------------------- #
+
+CROP_KEEP_MIN = 0.72            # a bottom-band crop keeps at least this share of the height
+CROP_LINES_MIN = 600            # ... and at least this many of the source's lines (stays sharp at 1080)
+CORNER_W, CORNER_H = 0.30, 0.22  # text inside a corner this big is a station bug: fine
+TEXT_GROUND_MIN = 0.50          # the share of a text band one flat grey covers (a graphic's box)
+SOFT_SHARE = 0.35               # a shot this much softer than the video's median ...
+SOFT_FLOOR = 2.2                # ... and under this detail (grey change per pixel at 320 px) is "through glass"
+
+
+def text_boxes(fr: list) -> List[Tuple[float, float, float, float]]:
+    """
+    Burned-in text (x0, y0, x1, y1 as shares of the frame): bands of dense vertical edges (src/slop.py's text
+    rows) found at the same rows in two frames that either hold still while the picture around them moves (a
+    graphic laid over the footage) or sit on a flat box of one colour. A facade, a fence or the horizon in a moving
+    shot moves with it; one in a locked-off shot has no flat ground (the hand-used raw clips, 2026-11-03).
+    """
+    try:
+        import numpy as np
+        from . import slop
+    except ImportError:
+        return []
+    grays, found = [], []
+    for f in fr:
+        g = f.astype(np.float32).mean(axis=2)
+        grays.append(g)
+        h, w = g.shape
+        boxes = []
+        for a, b in slop._bands(slop._text_rows(g)):
+            if (b - a + 1) / h < 0.03:
+                continue
+            edges = np.abs(np.diff(g[a:b + 1], axis=1)) > 48
+            cols = np.where(edges.sum(axis=0) >= 2)[0]
+            if len(cols) < 4:
+                continue
+            x0, x1 = int(cols.min()), int(cols.max()) + 1
+            region = (f[a:b + 1, x0:x1].astype(np.int32).mean(axis=2) // 24).astype(np.int64)
+            ground = float(np.bincount(region.ravel()).max()) / float(region.size)
+            boxes.append((a, b, x0, x1, ground))
+        found.append(boxes)
+    out: List[Tuple[float, float, float, float]] = []
+    for k in range(len(found) - 1):
+        g0, g1 = grays[k], grays[k + 1]
+        rest = float(np.abs(g0 - g1).mean())
+        h, w = g0.shape
+        for a, b, x0, x1, ground in found[k]:
+            if not any(abs(o[0] - a) <= 2 and abs(o[1] - b) <= 2 for o in found[k + 1]):
+                continue
+            band = float(np.abs(g0[a:b + 1, x0:x1] - g1[a:b + 1, x0:x1]).mean())
+            steady = rest >= 2.0 and band <= 0.35 * rest
+            if not (steady or ground >= TEXT_GROUND_MIN):
+                continue
+            box = (round(x0 / w, 3), round(a / h, 3), round(x1 / w, 3), round((b + 1) / h, 3))
+            if all(abs(box[1] - o[1]) > 0.02 or abs(box[0] - o[0]) > 0.05 for o in out):
+                out.append(box)
+    return out
+
+
+def _lowest_text_top(fr: list, floor: float) -> float:
+    """The highest top (share of the height) of any text-like band below 60% in any frame, else `floor`."""
+    try:
+        import numpy as np
+        from . import slop
+    except ImportError:
+        return floor
+    top = floor
+    for f in fr:
+        g = f.astype(np.float32).mean(axis=2)
+        h = g.shape[0]
+        for a, b in slop._bands(slop._text_rows(g)):
+            if a / h >= 0.6 and (b - a + 1) / h >= 0.02:
+                top = min(top, a / h)
+    return top
+
+
+def text_verdict(fr: list, src_height: int = 1080) -> dict:
+    """{"action": "keep" | "crop" | "reject", "why", "keep": height share to keep (crop)} for a shot's frames."""
+    def corner(b) -> bool:
+        return ((b[2] - b[0]) <= CORNER_W and (b[3] - b[1]) <= CORNER_H
+                and (b[1] <= CORNER_H or b[3] >= 1 - CORNER_H) and (b[2] <= 0.4 or b[0] >= 0.6))
+    boxes = [b for b in text_boxes(fr) if not corner(b)]
+    if not boxes:
+        return {"action": "keep"}
+    top = min(b[1] for b in boxes)
+    if top >= CROP_KEEP_MIN - 0.02:
+        top = min(top, _lowest_text_top(fr, top))           # a chyron's other line, changing or not
+        keep = max(CROP_KEEP_MIN, round(top - 0.02, 3))
+        if keep * src_height >= CROP_LINES_MIN:
+            return {"action": "crop", "keep": keep, "why": f"text in the bottom band (from {int(top * 100)}%)"}
+        return {"action": "reject", "why": "text in the bottom band, too few lines to crop it out"}
+    area = sum((b[2] - b[0]) * (b[3] - b[1]) for b in boxes)
+    return {"action": "reject", "why": f"text over the picture ({len(boxes)} band(s), {area * 100:.0f}% of it)"}
+
+
+def detail(fr: list) -> float:
+    """Mean grey change between neighbouring pixels over the frames (320 px wide): low = soft / through glass."""
+    try:
+        import numpy as np
+    except ImportError:
+        return 0.0
+    if not fr:
+        return 0.0
+    vals = []
+    for f in fr:
+        g = f.astype(np.float32).mean(axis=2)
+        vals.append(float(np.abs(np.diff(g, axis=1)).mean() + np.abs(np.diff(g, axis=0)).mean()) / 2.0)
+    return float(np.median(vals))
+
+
+def crop_bottom(path: str, keep: float) -> bool:
+    """The clip's top `keep` of the height scaled back to its size (the sound kept), in place."""
+    k = f"{keep:.3f}"
+    # The top-centre (keep x keep) of the frame, scaled back up: the aspect stays, the bottom band goes.
+    vf = (f"crop=trunc(iw*{k}/2)*2:trunc(ih*{k}/2)*2:(iw-iw*{k})/2:0,"
+          f"scale=trunc(iw/{k}/2)*2:trunc(ih/{k}/2)*2:flags=lanczos,setsar=1")
+    tmp = path + ".crop.mp4"
+    try:
+        p = subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", path, "-vf", vf, "-map", "0:v:0", "-map", "0:a?",
+                            "-c:v", "libx264", "-preset", "veryfast", "-crf", "17", "-c:a", "copy",
+                            "-movflags", "+faststart", tmp], capture_output=True, timeout=300)
+        if p.returncode != 0 or not os.path.isfile(tmp) or os.path.getsize(tmp) < 5_000:
+            raise RuntimeError((p.stderr or b"")[-200:].decode("utf-8", "replace"))
+        os.replace(tmp, path)
+        return True
+    except Exception as e:  # noqa: BLE001 - not cropped: rejected instead by the caller
+        print(f"[stormdesk] crop {os.path.basename(path)}: {type(e).__name__}: {str(e)[:120]}", flush=True)
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        return False
+
+
+def clean_check(doc: dict, read: Optional[Callable] = None, crop: Optional[Callable] = None) -> List[dict]:
+    """
+    Every narration and pause clip read on 3 frames: other outlets' text (text_verdict) cropped out when it
+    sits only in the bottom band, else the shot marked for replacement (scene["_reject"]); a shot far softer than
+    the rest (filmed through dirty or rainy glass) marked "soft" - replaced only when a clearer clip exists.
+    Returns one row per shot acted on (the run report's cleanCheck).
+    """
+    fps = int(doc.get("fps") or 30)
+    read = read or (lambda path, a, secs: frames(path, a, secs, n=3, w=320, h=180))
+    crop = crop or crop_bottom
+    rows: List[dict] = []
+    soft: Dict[int, float] = {}
+    cropped: Dict[str, float] = {}
+    for i, s in enumerate(doc["scenes"]):
+        m = s.get("media") or {}
+        path = _local(s)
+        if m.get("type") != "video" or not path or is_ai(s):
+            continue
+        fr = read(path, float(m.get("trimStart") or 0.0), int(s["durationInFrames"]) / float(fps))
+        if not fr:
+            continue
+        if path in cropped:
+            s.setdefault("stormDesk", {})["cropped"] = cropped[path]
+            continue
+        v = text_verdict(fr, int(_probe(path).get("h") or 1080))
+        if v["action"] == "crop":
+            if crop(path, v["keep"]) and text_verdict(read(path, float(m.get("trimStart") or 0.0), int(
+                    s["durationInFrames"]) / float(fps)))["action"] == "keep":
+                cropped[path] = v["keep"]
+                s.setdefault("stormDesk", {})["cropped"] = v["keep"]
+                rows.append({"shot": i, "why": v["why"], "action": f"cropped to {int(v['keep'] * 100)}% height"})
+                continue
+            v = {"action": "reject", "why": v["why"] + " (crop failed)"}
+        if v["action"] == "reject":
+            if s.get("natSound"):
+                rows.append({"shot": i, "why": v["why"], "action": "kept (a pause clip)"})
+            else:
+                s["_reject"] = v["why"]
+                rows.append({"shot": i, "why": v["why"], "action": "replace"})
+            continue
+        soft[i] = detail(fr)
+    if len(soft) >= 4:
+        import statistics
+        med = statistics.median(soft.values())
+        for i, d in soft.items():
+            if d < SOFT_FLOOR and d < SOFT_SHARE * med and not doc["scenes"][i].get("natSound"):
+                doc["scenes"][i]["_soft"] = True
+                rows.append({"shot": i, "why": f"soft / through glass (detail {d:.1f} vs {med:.1f})",
+                             "action": "replace if a clearer clip exists"})
+    return rows
+
+
 def bake(path: str, boxes: List[List[float]], flip: bool) -> bool:
     """Blur `boxes` (shares of the frame) and mirror the clip, in place (sound kept). True when replaced."""
     if not boxes and not flip:
@@ -1612,6 +1800,12 @@ def stills_to_replace(doc: dict, opening: float = NO_AI_SECONDS,
         if s.get("natSound") or i in {j for j, _ in out} or (s.get("media") or {}).get("type") != "video" \
                 or is_ai(s) or not video_id(s).startswith("yt:"):
             continue
+        if s.get("_reject"):
+            out.append((i, "text over the picture"))
+            continue
+        if s.get("_soft"):
+            out.append((i, "soft / through glass"))
+            continue
         kind = source_kind(_sm(s).get("channel") or "")
         if kind == "reupload":
             out.append((i, "a re-uploader's footage"))
@@ -1828,7 +2022,7 @@ def replace_stills(doc: dict, pool: Optional[Callable[[dict], List[dict]]] = Non
     # Nothing in the bank: another moment of an original clip the video already uses.
     left2 = []
     for i, why in left:
-        if why != "a picture in the opening" and _reuse_original(doc, i, used, gap):
+        if why not in ("a picture in the opening", "soft / through glass") and _reuse_original(doc, i, used, gap):
             done += 1
         else:
             left2.append((i, why))
@@ -1855,7 +2049,8 @@ def replace_stills(doc: dict, pool: Optional[Callable[[dict], List[dict]]] = Non
     # still to come stay right). Pictures past the share stay (a real photo beats an empty frame).
     held, final_left = 0, []
     for i, why in sorted(still_left, key=lambda t: -t[0]):
-        if why in ("empty", "a re-uploader's footage", "an unknown source") and _hold_previous(doc, i):
+        if why in ("empty", "a re-uploader's footage", "an unknown source", "text over the picture") \
+                and _hold_previous(doc, i):
             held += 1
         else:
             final_left.append((i, why))
@@ -2078,10 +2273,17 @@ def finish(doc: dict, inp: dict, brief: Optional[dict] = None, work: str = "", f
 
     pauses = out_pauses(inp.get("_storm_pauses") or [])
     rep["pauses"] = step("pauses", lambda: make_pauses(doc, pauses, work, fetch, frame_vertical, check)) or []
+    rep["cleanCheck"] = step("clean check", lambda: clean_check(doc)) or []
     st = step("stills", lambda: replace_stills(doc, check=check)) or {}
+    for s in doc["scenes"]:
+        s.pop("_reject", None)
+        s.pop("_soft", None)
     rep["stillsReplaced"], rep["stillsMoved"] = st.get("replaced", 0), st.get("moved", 0)
     rep["stillsLeft"] = [{"shot": i, "why": w} for i, w in (st.get("left") or [])][:40]
     rep["heldOver"], rep["channelsResolved"] = st.get("held", 0), st.get("resolved", 0)
+    rep["rejects"] = ([{"shot": r["shot"], "why": r["why"], "action": r["action"]} for r in rep["cleanCheck"]]
+                      + [{"shot": x["shot"], "why": x["why"], "action": "left (nothing better found)"}
+                         for x in rep["stillsLeft"]])[:200]
     rep["shotsCut"] = step("shot cap", lambda: cap_shots(doc)) or 0
     moved = step("ai opening", lambda: keep_ai_out_of_opening(doc)) or (0, 0)
     rep["aiMovedOutOfOpening"], rep["aiInOpening"] = moved

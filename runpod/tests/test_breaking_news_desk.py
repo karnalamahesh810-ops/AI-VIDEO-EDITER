@@ -690,6 +690,89 @@ class OwnerRound3Tests(unittest.TestCase):
         self.assertEqual(types.count('adjust?: import("./edit/adjust").Adjust | null;'), 2)
 
 
+class CleanShotTests(unittest.TestCase):
+    """The owner (2026-11-03): clean shots - no other outlets' text, nothing filmed through dirty glass."""
+
+    def _clip(self, d, name, y=None):
+        np = _np()
+        from PIL import Image
+        cmd = ["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=size=1280x720:rate=30:duration=5"]
+        if y is not None:
+            bar = np.zeros((90, 1100, 4), np.uint8)
+            bar[..., 0:3] = (20, 40, 120)
+            bar[..., 3] = 255
+            for x in range(40, 1060, 14):
+                bar[25:65, x:x + 6, 0:3] = 255
+            Image.fromarray(bar).save(os.path.join(d, "bar.png"))
+            cmd += ["-i", os.path.join(d, "bar.png"), "-filter_complex", f"[0][1]overlay=90:{y}"]
+        out = os.path.join(d, name)
+        subprocess.run(cmd + ["-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", out], check=True)
+        return out
+
+    @unittest.skipUnless(HAVE_FFMPEG, "ffmpeg")
+    def test_text_gate_crop_reject_keep(self):
+        d = tempfile.mkdtemp()
+        try:
+            low = self._clip(d, "low.mp4", y=600)       # a lower third in the bottom band
+            mid = self._clip(d, "mid.mp4", y=300)       # a banner over the middle
+            clean = self._clip(d, "clean.mp4")
+            fr = lambda p: stormdesk.frames(p, 0.0, 5.0, n=3, w=320, h=180)  # noqa: E731
+            self.assertEqual(stormdesk.text_verdict(fr(low), 720)["action"], "crop")
+            self.assertGreaterEqual(stormdesk.text_verdict(fr(low), 720)["keep"], stormdesk.CROP_KEEP_MIN)
+            self.assertEqual(stormdesk.text_verdict(fr(mid), 720)["action"], "reject")
+            self.assertEqual(stormdesk.text_verdict(fr(clean), 720)["action"], "keep")
+            # Too few lines to crop and stay sharp: rejected.
+            self.assertEqual(stormdesk.text_verdict(fr(low), 480)["action"], "reject")
+            # The pass: the low one cropped (and clean after it), the middle one marked for replacement.
+            sc = [scene(0, 0, 4, "AAAAAAAAAAA", "A", 10), scene(1, 4, 8, "BBBBBBBBBBB", "B", 10),
+                  scene(2, 8, 12, "CCCCCCCCCCC", "C", 10)]
+            for s, p in zip(sc, (low, mid, clean)):
+                s["media"]["url"] = p
+            doc = doc_of(sc)
+            rows = stormdesk.clean_check(doc)
+            acts = {r["shot"]: r["action"] for r in rows}
+            self.assertTrue(acts[0].startswith("cropped"))
+            self.assertEqual(acts[1], "replace")
+            self.assertNotIn(2, acts)
+            self.assertTrue(doc["scenes"][1].get("_reject"))
+            self.assertEqual(stormdesk.text_verdict(fr(low), 720)["action"], "keep")
+            self.assertEqual(dict(stormdesk.stills_to_replace(doc)).get(1), "text over the picture")
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def test_soft_shot_marked_only_against_the_rest(self):
+        np = _np()
+        rng = np.random.RandomState(5)
+        sharp = [(rng.rand(180, 320, 3) * 255).astype(np.uint8) for _ in range(3)]
+        soft = [(np.full((180, 320, 3), 120) + rng.rand(180, 320, 3) * 3).astype(np.uint8) for _ in range(3)]
+        self.assertLess(stormdesk.detail(soft), stormdesk.SOFT_FLOOR)
+        self.assertGreater(stormdesk.detail(sharp), 10 * stormdesk.SOFT_FLOOR)
+        sc = [scene(i, i * 4, i * 4 + 4, f"V{i:010d}", f"P{i}", 10) for i in range(5)]
+        for i, s in enumerate(sc):
+            s["media"]["url"] = __file__                 # a local file; its frames are injected below
+            s["media"]["trimStart"] = float(i)
+        doc = doc_of(sc)
+        rows = stormdesk.clean_check(doc, read=lambda p, a, secs: soft if a == 3.0 else sharp)
+        self.assertEqual([r["shot"] for r in rows], [3])
+        self.assertTrue(doc["scenes"][3].get("_soft"))
+        self.assertEqual(dict(stormdesk.stills_to_replace(doc)).get(3), "soft / through glass")
+        # The clearest footage of the moment stays: with nothing better, a soft shot is kept, never held over.
+        got = stormdesk.replace_stills(doc, pool=lambda job: [], take=lambda e: True, info=lambda v: {})
+        self.assertEqual(len(doc["scenes"]), 5)
+        self.assertIn((3, "soft / through glass"), got["left"])
+
+    def test_rejects_are_in_the_report(self):
+        sc = [scene(i, i * 4, i * 4 + 4, f"V{i:010d}", f"P{i}", 10) for i in range(3)]
+        doc = doc_of(sc)
+        inp = {"video_style": "storm_desk", "storm_desk": {"open_clip": False, "pauses": 0, "lookalike": False,
+                                                           "blur_marks": False}}
+        with mock.patch.object(stormdesk, "clean_check",
+                               return_value=[{"shot": 1, "why": "text over the picture", "action": "replace"}]):
+            rep = stormdesk.finish(doc, inp, {}, ".")
+        self.assertIn({"shot": 1, "why": "text over the picture", "action": "replace"}, rep["rejects"])
+        self.assertFalse([s for s in doc["scenes"] if "_reject" in s or "_soft" in s])
+
+
 class EditPromptTests(unittest.TestCase):
     def tearDown(self):
         director.set_edit_prompt("")

@@ -658,6 +658,17 @@ def check_file(path: str, kind: str = "video", allow_people: bool = False, allow
         if getattr(config, "FIELD_FOOTAGE_ONLY", False):
             why = banner_verdict(path)
             if why:
+                # Text only in the bottom band is cropped out later (stormdesk.clean_check); anything else goes.
+                try:
+                    from . import stormdesk
+                    secs = float(stormdesk._probe(path).get("duration") or 4.0)
+                    v = stormdesk.text_verdict(stormdesk.frames(path, 0.0, secs, n=3, w=320, h=180),
+                                               int(stormdesk._probe(path).get("h") or 1080))
+                    if v.get("action") == "crop":
+                        why = ""
+                except Exception:  # noqa: BLE001 - the banner verdict stands
+                    pass
+            if why:
                 return why
     v = clip_verdict(_rgb_frames(path, 3), allow_people=allow_people, allow_maps=allow_maps, kind=kind)
     return (v or {}).get("reject") or ""
