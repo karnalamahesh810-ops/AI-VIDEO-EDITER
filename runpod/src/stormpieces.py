@@ -265,6 +265,9 @@ def looks_for_shot(tl: dict, f0: int, n: int, fps: int) -> List[list]:
     for a, tb, b, title, sub in tl.get("titles") or []:
         if a < t1 and b + 0.2 > t0:
             out.append(["title", rel(a), rel(tb), rel(b), title, sub])
+    for g in tl.get("graphs") or []:         # [start, end, title, [[label, shown value, number, highlighted], ...], base]
+        if g[0] < t1 and g[1] > t0:
+            out.append(["graph", rel(g[0]), rel(g[1]), g[2], g[3], float(g[4]) if len(g) > 4 else 0.0])
     for mp in tl.get("maps") or []:
         if mp["t0"] < t1 and mp["t1"] > t0:
             out.append(["map", rel(mp["t0"]), rel(mp["t1"]), rel(mp["pin"]), mp["lat"], mp["lon"], mp["label"],
@@ -422,6 +425,8 @@ def _draw_looks(fr, t: float, looks: List[list], cams: dict):
             L.place_tag(fr, t, x[1], x[2], x[3])
         elif x[0] == "stamp":
             L.cam_stamp(fr, t, x[1], x[2], x[3], x[4])
+        elif x[0] == "graph":
+            L.mini_graph(fr, t, x[1], x[2], x[3], [tuple(r) for r in x[4]], base=x[5])
     return fr
 
 
@@ -701,6 +706,9 @@ def prepare_logo(doc: dict, work: str) -> Tuple[str, str]:
     return path, str(logo.get("text") or "")
 
 
+LAST_RUN: Dict[str, int] = {}
+
+
 def render_pieces(doc: dict, work: str, on_progress: Optional[Callable[[int, int, int], None]] = None,
                   scope: str = "") -> List[str]:
     """
@@ -715,11 +723,7 @@ def render_pieces(doc: dict, work: str, on_progress: Optional[Callable[[int, int
     procs, threads = _workers()
     for sp in specs:
         sp = dict(sp)
-        key = spec_key(sp)                       # named by the link it was planned with, whatever disk it is on now
-        if sp["kind"] != "animation":
-            sp["src"] = localise(sp["src"], work)
-        if sp.get("dissolve"):
-            sp["dissolve"] = {**sp["dissolve"], "src": localise(sp["dissolve"]["src"], work)}
+        key = spec_key(sp)                       # named by what it shows, whatever disk or link its source is on now
         out = os.path.join(folder, key + ".mp4")
         paths.append(out)
         if os.path.isfile(out) and os.path.getsize(out) > 1000:
@@ -729,8 +733,14 @@ def render_pieces(doc: dict, work: str, on_progress: Optional[Callable[[int, int
             reused += 1
             continue
         if not any(j[1] == out for j in jobs):
+            # Only a shot being drawn needs its source on this disk.
+            if sp["kind"] != "animation":
+                sp["src"] = localise(sp["src"], work)
+            if sp.get("dissolve"):
+                sp["dissolve"] = {**sp["dissolve"], "src": localise(sp["dissolve"]["src"], work)}
             jobs.append((sp, out, threads))
     total = len(specs)
+    LAST_RUN.update(drawn=len(jobs), reused=reused)
     if on_progress:
         on_progress(reused, total, reused)
     if not jobs:
@@ -868,6 +878,8 @@ def sfx_cues(tl: Optional[dict]) -> List[Tuple[float, str, float, float]]:
         add(a, "place")
     for a, *_r in tl.get("stamps") or []:
         add(a, "stamp")
+    for a, *_r in tl.get("graphs") or []:
+        add(a, "place")
     for a, *_r in tl.get("titles") or []:
         add(a, "title")
     for m in tl.get("maps") or []:
@@ -972,7 +984,8 @@ def draw(doc: dict, out_path: str, work: str, report: Optional[Callable[[str, in
         except OSError:
             pass
     t3 = time.time()
-    rep.update({"engine": "pieces", "shots": len(paths), "shotsSeconds": round(t1 - t0, 1), "joinSeconds": round(t2 - t1, 1),
+    rep.update({"engine": "pieces", "shots": len(paths), "shotsDrawn": LAST_RUN.get("drawn"), "shotsReused": LAST_RUN.get("reused"),
+                "shotsSeconds": round(t1 - t0, 1), "joinSeconds": round(t2 - t1, 1),
                 "soundSeconds": round(t3 - t2, 1)})
     return rep
 

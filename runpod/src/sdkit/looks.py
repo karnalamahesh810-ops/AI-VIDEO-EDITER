@@ -125,12 +125,23 @@ def place_tag(fr, t, t0, t1, text):
         fr.alpha_composite(alpha(d, a), (40, 140 + 8))
 
 
+def _back(x):
+    """Ease-out with a small overshoot: things arrive and settle instead of just appearing."""
+    x = max(0.0, min(1.0, x)); c = 1.25
+    return 1 + (c + 1) * (x - 1) ** 3 + c * (x - 1) ** 2
+
+
 def red_stat(fr, t, t0, t1, text, y=470, size=104):
-    """Big red bold number with a red glow, fades in on the word (9:28 of the reference)."""
+    """Big red bold number with a soft glow. Lands on its word with a small settle, keeps drifting so it is never
+    frozen, and leaves by lifting and fading (owner 2026-11-05: no static open or close)."""
     if not (t0 <= t < t1):
         return
     lay = text_layer(text, font(F_AR, size, True), RED, glow=(255, 30, 30), glow_r=14, glow_k=0.9, shadow=0.55)
-    put(fr, lay, W // 2, y, fade(t, t0, t1, 0.2, 0.3))
+    k_in = _back((t - t0) / 0.32); k_out = ease(ramp(t, t1 - 0.28, t1))
+    zoom = (0.86 + 0.14 * k_in) * (1 + 0.012 * (t - t0))
+    im, pad = lay
+    lay = (im.resize((max(1, int(im.width * zoom)), max(1, int(im.height * zoom))), Image.BILINEAR), pad)
+    put(fr, lay, W // 2, y - int(26 * k_out), min(1.0, ramp(t, t0, t0 + 0.14)) * (1 - k_out))
 
 
 def chapter_title(fr, t, t0, t_black, t1, title, sub):
@@ -629,3 +640,36 @@ def map_marinas(t, cam, t0, t1, pins, view=(36.25, -114.55, 0.47, 0.51)):
         if tg and t >= ta + 0.45:
             put(fr, tg, tx, ty, ramp(t, ta + 0.45, ta + 0.7), "l")
     return fr
+
+
+def mini_graph(fr, t, t0, t1, title, rows, x=1180, y=120, w=640, h=320, base=0.0):
+    """A small graph over the clip (owner 2026-11-05: short, the clip keeps playing). The panel slides in and settles,
+    bars grow one after another, the numbers count up, and it slides back out. About 4 s on screen."""
+    if not (t0 <= t < t1):
+        return
+    from PIL import ImageDraw as _D
+    lay = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    d = _D.Draw(lay)
+    d.rounded_rectangle((0, 0, w - 1, h - 1), 18, fill=(6, 12, 24, 215), outline=(255, 255, 255, 40), width=2)
+    d.text((26, 18), title, font=font(F_AR, 34, True), fill=(255, 255, 255, 255))
+    hi = max(r[2] for r in rows); span = max(1e-6, hi - base)
+    n = len(rows); rh = (h - 90) / n
+    for i, (lab, val, v, hot) in enumerate(rows):
+        k = _back((t - t0 - 0.3 - i * 0.28) / 0.55) if t > t0 + 0.3 + i * 0.28 else 0.0
+        yy = 78 + i * rh
+        d.text((26, yy + 6), lab, font=font(F_AR, 26), fill=(205, 214, 228, 255))
+        bx = 210; full = w - bx - 190
+        bw = max(0, int(full * (v - base) / span * k))
+        if bw > 4:
+            d.rounded_rectangle((bx, yy + 4, bx + bw, yy + rh - 12), 6, fill=(255, 48, 48, 255) if hot else (120, 140, 170, 255))
+        if k > 0.02:
+            num = "".join(c for c in val if c.isdigit() or c == ".")
+            shown = val
+            if num and k < 1:
+                cur = v * min(1.0, k) if base == 0 else base + (v - base) * min(1.0, k)
+                shown = (f"{cur:,.2f}" if "." in num else f"{int(cur):,}") + val[val.rfind(" "):]
+            d.text((bx + bw + 12, yy + 6), shown, font=font(F_AR, 28, True), fill=(255, 255, 255, 255))
+    k_in = _back((t - t0) / 0.42); k_out = ease(ramp(t, t1 - 0.32, t1))
+    off = int((1 - k_in) * 90 + k_out * 90)
+    a = min(1.0, ramp(t, t0, t0 + 0.18)) * (1 - k_out)
+    fr.alpha_composite(alpha(lay, a), (max(0, min(fr.width - w, x + off)), y))

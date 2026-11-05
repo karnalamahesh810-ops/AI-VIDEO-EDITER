@@ -172,6 +172,34 @@ class FitTests(unittest.TestCase):
         self.assertEqual(d["durationInFrames"], 600)
 
 
+class OwnerRules1105(unittest.TestCase):
+    def test_plain_pauses_kept_to_two_talking_ones_stay(self):
+        sc = [scene(0, 0, 90, "a")]
+        rows = []
+        for i, (score, talk) in enumerate(((0.9, False), (0.2, False), (0.5, False), (0.1, True))):
+            s = scene(i + 1, 90 + i * 300, 210, f"p{i}", natSound=True, **({"talk": True} if talk else {}))
+            sc.append(s)
+            rows.append({"clip": os.path.basename(s["media"]["url"]), "score": score})
+        d = doc_of(sc)
+        self.assertEqual(stormdesk.drop_plain_pauses(d, rows), 1)
+        self.assertEqual([r["clip"] is None for r in rows], [False, True, False, False])
+        self.assertEqual(sum(1 for s in d["scenes"] if s.get("natSound")), 3)
+
+    def test_talking_on_camera_needs_speech_and_a_real_face(self):
+        import numpy as np
+        fr = [np.zeros((180, 320, 3), np.uint8)] * 6
+        big = lambda _f: [(100, 40, 60, 80)]          # noqa: E731
+        small = lambda _f: [(100, 40, 8, 8)]          # noqa: E731
+        self.assertTrue(stormdesk.is_talking_shot(fr, "speech", big))
+        self.assertFalse(stormdesk.is_talking_shot(fr, "speech", small))
+        self.assertFalse(stormdesk.is_talking_shot(fr, "nature", big))
+        self.assertTrue(stormdesk.is_talking_shot(fr, "speech", lambda _f: [(0.3, 0.2, 0.2, 0.3)]))     # find_faces: shares of the frame
+        self.assertFalse(stormdesk.is_talking_shot(fr, "speech", lambda _f: [(0.3, 0.2, 0.05, 0.05)]))
+
+    def test_stats_may_come_every_five_seconds(self):
+        self.assertEqual(stormlooks.STAT_EVERY, 5.0)
+
+
 class ChannelRuleTests(unittest.TestCase):
     def test_personality_never_creator_two_shots_station_free(self):
         sc = [scene(i, i * 90, 90, f"v{i}", at=i * 10.0, ch="Joe Drone Pilot") for i in range(4)]
@@ -463,6 +491,13 @@ class DrawTests(unittest.TestCase):
             stormpieces.render_pieces(d, work, lambda done, total, reused: seen.append((done, total, reused)))
         self.assertEqual(seen[0], (1, 2, 1))
         self.assertEqual(pool.call_count, 1)
+
+    def test_a_small_graph_over_a_clip_draws(self):
+        spec = dict(v=1, kind="video", src=self.clip, ss=0.0, n=20, fps=30, mode="full", delogo=[], flip=False, adjust={}, layers=[[20, ()]],
+                    looks=[["graph", 0.0, 0.6, "FORECAST VS. ACTUAL", [["Forecast", "1,033.97 FT", 1033.97, False], ["Actual", "1,039.21 FT", 1039.21, True]], 1030.0]])
+        out = os.path.join(self.t, "graph", "g.mp4")
+        stormpieces.render_one(spec, out, threads=1)
+        self.assertEqual(stormpieces.frames_of(out), 20)
 
     def test_a_text_card_scene_draws(self):
         spec = dict(v=1, kind="animation", src="", ss=0.0, n=15, fps=30, mode="full", delogo=[], flip=False, adjust={},

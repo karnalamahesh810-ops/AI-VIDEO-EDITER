@@ -28,7 +28,7 @@ PLACE_SECONDS = 4.4
 STAMP_SECONDS = 4.4
 MAP_SECONDS = 7.0
 GAP_SECONDS = 0.5           # between two looks
-STAT_EVERY = 9.0            # at least this far apart
+STAT_EVERY = 5.0            # at least this far apart (the owner 2026-11-05: red text on every spoken number he would expect)
 PLACE_MAX = 6
 STAMP_MAX = 4
 TITLE_MAX = 3
@@ -250,7 +250,7 @@ def timeline(doc: dict, blocks: Sequence[dict], pauses: Sequence[dict], brief: O
     words = _words(doc)
     total = int(doc.get("durationInFrames") or 0) / float(doc.get("fps") or 30)
     today = today or datetime.date.today()
-    tl: Dict[str, Any] = {"type": [], "stats": [], "places": [], "stamps": [], "titles": [], "maps": []}
+    tl: Dict[str, Any] = {"type": [], "stats": [], "places": [], "stamps": [], "titles": [], "maps": [], "graphs": []}
     if not words:
         return tl
     # Hook and pause clips keep their picture (a small caption only): no look over them.

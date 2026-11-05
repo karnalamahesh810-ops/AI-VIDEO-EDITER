@@ -74,6 +74,8 @@ NAT_LUFS = -20.0                # a pause clip's sound before the master (the la
 NAT_FADE = 0.2
 J_LEAD = 0.35                   # a pause's sound starts this much before its picture (a J cut)
 L_TAIL = 0.6                    # ... and fades out under the narration's first words after it (an L cut)
+NATURAL_PAUSES_MAX = 2          # plain natural-sound pauses a video: the owner cut 3 of them as empty (2026-11-05)
+TALKING_FACE_SHARE = 0.015      # a face at least this share of the frame, with speech on the clip: someone talking on camera
 HOOK_CLIPS = 3                  # the opening: this many clips (the laptop videos since lp9: HOOKS = [6.0, 7.76, 8.08]) ...
 HOOK_SECONDS = 20.0             # ... about this long together, each cut on its own sentence; the last dissolves into the story
 HOOK_CLIP_MAX = 9.0             # one hook clip at most (the laptop's: 6.0, 7.76, 8.08)
@@ -2543,6 +2545,59 @@ def mark_channels(doc: dict, led: Any = None, earlier_channels: Optional[set] = 
     return rows
 
 
+def drop_plain_pauses(doc: dict, rows: List[dict], most: int = NATURAL_PAUSES_MAX) -> int:
+    """No pause unless something worth stopping for happens (the owner, 2026-11-05: natural-sound pauses of plain water felt
+    empty). Someone talking always stays; of the rest only the `most` best-scored do. A dropped pause's slot then closes
+    (apply_fits). Returns how many went."""
+    plain = []
+    for r in rows:
+        if not r.get("clip") or r.get("open"):
+            continue
+        s = next((x for x in doc["scenes"] if x.get("natSound") and os.path.basename(_local(x) or str((x.get("media") or {}).get("url") or "")) == os.path.basename(str(r["clip"]))), None)
+        if s is not None and not s.get("talk"):
+            plain.append((float(r.get("score") or 0.0), id(s), s, r))
+    plain.sort(key=lambda x: (-x[0], x[1]))
+    for _score, _i, s, r in plain[most:]:
+        doc["scenes"].remove(s)
+        r["clip"] = None
+        r["why"] = "plain natural sound: dropped (at most %d a video)" % most
+    return max(0, len(plain) - most)
+
+
+def is_talking_shot(fr: list, kind: str, faces: Optional[Callable] = None) -> bool:
+    """Someone talking on camera (the owner: under the narration it reads as a muted clip): speech on the clip's sound and a
+    face of real size in its frames. A reporter's voice over pictures of the flood has no such face and stays."""
+    if kind != "speech" or not fr:
+        return False
+    if faces is None:
+        from . import reframe
+        if not reframe.faces_available():
+            return False
+        faces = reframe.find_faces
+    hits = 0
+    for f in (fr[0], fr[len(fr) // 2], fr[-1]):
+        h, w = f.shape[:2]
+        if any(_face_share(b, w, h) >= TALKING_FACE_SHARE for b in faces(f) or []):
+            hits += 1
+    return hits >= 2
+
+
+def _face_share(b: Any, w: int, h: int) -> float:
+    """A face box's share of the frame: reframe's boxes (x, y, w, h first), plain or as an object."""
+    try:
+        if hasattr(b, "w"):
+            bw, bh = float(b.w), float(b.h)
+        elif isinstance(b, dict):
+            bw, bh = float(b.get("w") or b.get("width")), float(b.get("h") or b.get("height"))
+        else:
+            bw, bh = float(b[2]), float(b[3])
+    except (TypeError, ValueError, IndexError):
+        return 0.0
+    if bw <= 1.0 and bh <= 1.0:                 # reframe.find_faces gives shares of the frame already
+        return bw * bh
+    return (bw * bh) / float(max(1, w * h))
+
+
 def apply_fits(doc: dict, pauses: List[dict], inp: dict, renarrate: Optional[Callable[[List[dict]], str]] = None) -> int:
     """
     A pause's length follows its clip (the owner: "the break length follows the clip"): a talking clip's sentences set it. The
@@ -2805,6 +2860,7 @@ def finish(doc: dict, inp: dict, brief: Optional[dict] = None, work: str = "", f
     JOB_LEDGER = step("ledger", lambda: stormledger.load(inp)) or stormledger.Ledger([])
     rep["ledgerMoments"] = len(JOB_LEDGER.moments)
     rep["pauses"] = step("pauses", lambda: make_pauses(doc, pauses, work, fetch, frame_vertical, check, listen=listen)) or []
+    rep["naturalPausesDropped"] = step("empty pauses", lambda: drop_plain_pauses(doc, rep["pauses"])) or 0
     rep["pauseFits"] = step("pause lengths", lambda: apply_fits(doc, pauses, inp, renarrate)) or 0
     rep["cleanCheck"] = step("clean check", lambda: clean_check(doc, virtual=engine == "pieces")) or []
     rep["channelRule"] = step("channel rule", lambda: mark_channels(doc, JOB_LEDGER)) or []
@@ -2915,6 +2971,11 @@ def finish(doc: dict, inp: dict, brief: Optional[dict] = None, work: str = "", f
                 m["clipAudio"].pop("parts", None)
             except Exception:  # noqa: BLE001 - unknown: silent under the voice
                 m["clipAudio"] = {"kind": "unknown"}
+            try:
+                if is_talking_shot(fr, str((m.get("clipAudio") or {}).get("kind") or "")):
+                    s["_talking"] = True
+            except Exception:  # noqa: BLE001 - the frame-sheet review still sees it
+                pass
         if clip_ok:
             try:
                 import numpy as np
@@ -2949,6 +3010,15 @@ def finish(doc: dict, inp: dict, brief: Optional[dict] = None, work: str = "", f
     if any(_local(s) for s in doc["scenes"]):
         with ThreadPoolExecutor(max(1, min(4, (os.cpu_count() or 2)))) as ex:
             list(ex.map(lambda i: step(f"look {i}", lambda: look(i)), range(len(doc["scenes"]))))
+    talking = [s for s in doc["scenes"] if s.pop("_talking", None)]
+    rep["talkingShotsSwapped"] = len(talking)
+    if talking:
+        for s in talking:
+            s["_reject"] = "someone talking on camera under the narration"
+        step("talking shots", lambda: replace_stills(doc, check=check))
+        for s in doc["scenes"]:
+            s.pop("_reject", None)
+            s.pop("_soft", None)
     rep["blurredClips"], rep["flippedClips"] = marked[0], flipped[0]
     if engine == "pieces":
         step("modes", lambda: set_modes(doc, marks_by_path))
