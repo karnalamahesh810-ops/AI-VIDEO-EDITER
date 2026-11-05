@@ -2454,6 +2454,17 @@ def music_level(doc: dict) -> Optional[dict]:
     return {"level": level, "duck": music["duck"], "voiceLufs": voice, "trackLufs": track}
 
 
+def music_plan(tracks: Any, total: float) -> List[dict]:
+    """The owner's tracks in turn over the video (the kit's picks "music": inv1, sus1, crime, crossfaded): links or
+    {"url", "at", "offset"}; a track with no time gets its even share of the video."""
+    rows = [{"url": x} if isinstance(x, str) else dict(x) for x in (tracks or []) if isinstance(x, (str, dict))]
+    rows = [r for r in rows if str(r.get("url") or "").startswith(("http://", "https://", "/"))][:6]
+    for k, r in enumerate(rows):
+        r["at"] = round(float(r["at"]) if isinstance(r.get("at"), (int, float)) else total * k / len(rows), 2)
+        r["offset"] = float(r.get("offset") or 0.0)
+    return sorted(rows, key=lambda r: r["at"])
+
+
 def reuse_gate(doc: dict, led: Any = None) -> dict:
     """The gate before the render (tools/reusecheck.py): what still reuses a moment. {"earlier": [...], "same": [...]}"""
     from . import stormledger
@@ -2955,9 +2966,7 @@ def finish(doc: dict, inp: dict, brief: Optional[dict] = None, work: str = "", f
     if engine == "pieces":
         from . import stormlooks
         doc["stormDesk"]["engine"] = "pieces"
-        tracks = [x for x in (opts.get("bgm_tracks") or []) if isinstance(x, dict) and x.get("url")]
-        if tracks:
-            doc["stormDesk"]["music"] = tracks[:6]
+        doc["stormDesk"]["music"] = music_plan(opts.get("bgm_tracks"), int(doc.get("durationInFrames") or 0) / float(fps))
         looks = step("looks", lambda: stormlooks.timeline(doc, blocks, pauses, brief, day, work, ask, opts=opts))
         if looks:
             doc["stormDesk"]["looks"] = looks

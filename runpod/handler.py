@@ -4386,6 +4386,9 @@ def handler(job):
                 out = do_render(local_doc, inp, work, report, split=True)
             else:
                 out = do_render(local_doc, inp, work, report)
+            if isinstance(out.get("stormDesk"), dict):
+                # The storm desk render's report with the saved timeline: the editor shows its 4K thumbnails from it.
+                doc.setdefault("meta", {}).setdefault("stormDesk", {})["render"] = out["stormDesk"]
             if isinstance(out.get("quality"), dict):
                 # What the check found and repaired, with the saved timeline -
                 # and the scenes it replaced in the video flagged for the editor.

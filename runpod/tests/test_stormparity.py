@@ -293,6 +293,11 @@ class SoundTests(unittest.TestCase):
             self.assertTrue(os.path.isfile(os.path.join(stormpieces.sfx_dir(), f)), f)
             self.assertLessEqual(db, -13.0)
 
+    def test_tracks_take_turns(self):
+        got = stormdesk.music_plan(["https://a/1.mp3", {"url": "https://a/2.mp3", "offset": 9}, "nope"], 600.0)
+        self.assertEqual([(r["url"][-5:], r["at"], r["offset"]) for r in got], [("1.mp3", 0.0, 0.0), ("2.mp3", 300.0, 9.0)])
+        self.assertEqual(stormdesk.music_plan(None, 600.0), [])
+
     def test_music_sections(self):
         self.assertEqual(stormpieces.music_sections({"stormDesk": {"music": [{"url": "u", "at": 3, "offset": 9}]}}),
                          [{"url": "u", "at": 3.0, "offset": 9.0}])
