@@ -128,7 +128,7 @@ def new(picture: Image.Image, head: str, path: str, logo: Optional[str] = None) 
 
 _ASK = ("You plan a YouTube thumbnail for a news video. From the title and the narration only, answer JSON: {\"own\": 2-3 huge "
         "words in CAPITALS, \"new\": 2-5 words in CAPITALS ending in \"!\", \"picture\": one sentence describing a realistic news photo "
-        "of the main subject and place, the whole landmark in frame, dramatic}. Headlines must be truthful: ALERT, RISING, WARNING "
+        "of the main subject and place, the whole landmark in frame, dramatic; for a flood or water story, massive flood waves taller than the landmark}. Headlines must be truthful: ALERT, RISING, WARNING "
         "and numbers the narration says; never claim something happened that did not. No text in the picture.")
 
 

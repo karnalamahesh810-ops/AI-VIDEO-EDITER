@@ -375,8 +375,10 @@ class SpecTests(unittest.TestCase):
         d["overlays"] = [{"type": "x"}]
         self.assertIn("overlays", stormpieces.supported(d))
         d["overlays"] = []
-        d["scenes"][0]["media"]["type"] = "animation"
-        self.assertIn("animation", stormpieces.supported(d))
+        d["scenes"][0]["media"]["type"] = "lottie"
+        self.assertIn("lottie", stormpieces.supported(d))
+        d["scenes"][0]["media"]["type"] = "animation"       # the quality check's text line: drawn as a card
+        self.assertEqual(stormpieces.supported(d), "")
 
     def test_delogo_stays_inside_the_frame(self):
         c = stormpieces.delogo_chain([[0.0, 0.0, 0.1, 0.1], [0.95, 0.95, 0.2, 0.2]], 1920, 1080)
@@ -438,6 +440,13 @@ class DrawTests(unittest.TestCase):
             stormpieces.render_pieces(d, work, lambda done, total, reused: seen.append((done, total, reused)))
         self.assertEqual(seen[0], (1, 2, 1))
         self.assertEqual(pool.call_count, 1)
+
+    def test_a_text_card_scene_draws(self):
+        spec = dict(v=1, kind="animation", src="", ss=0.0, n=15, fps=30, mode="full", delogo=[], flip=False, adjust={},
+                    layers=[[15, (("card", "The lake rose two feet"),)]])
+        out = os.path.join(self.t, "card", "c.mp4")
+        stormpieces.render_one(spec, out, threads=1)
+        self.assertEqual(stormpieces.frames_of(out), 15)
 
     def test_a_broken_source_fails_loudly_never_hangs(self):
         spec = dict(v=1, kind="video", src=os.path.join(self.t, "missing.mp4"), ss=0.0, n=10, fps=30, mode="full", delogo=[], flip=False, adjust={},

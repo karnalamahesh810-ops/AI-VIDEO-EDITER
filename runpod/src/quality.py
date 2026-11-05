@@ -1246,7 +1246,10 @@ class Gate:
                 p = self._cover(i, scenes, got.seconds)
                 if p:
                     problems[i] = p
-        for i, why in gapfill.find_repeats(self.doc):
+        # A pieces-engine timeline has its own rule, checked at plan and render (stormdesk.reuse_gate: the same frames never
+        # twice): this ladder's wider one (a moment within 30 s of another) turned a real edit's shots into text cards.
+        desk_rule = str((self.doc.get("stormDesk") or {}).get("engine") or "") == "pieces"
+        for i, why in ([] if desk_rule else gapfill.find_repeats(self.doc)):
             if i < len(scenes) and is_presenter_scene(scenes[i]):
                 continue                    # (a split screen's real half seen twice: the presenter stays)
             problems.setdefault(i, ("repeat", f"it repeats an earlier scene ({why})"))

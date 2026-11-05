@@ -59,6 +59,8 @@ def supported(doc: dict) -> str:
         return "overlays in the timeline"
     for s in doc.get("scenes") or []:
         m = s.get("media") or {}
+        if m.get("type") == "animation":
+            continue                         # the quality check's last resort, a line of text: drawn as a card
         if m.get("type") not in ("video", "image"):
             return f"a {m.get('type') or 'empty'} scene"
         if not m.get("url"):
@@ -195,6 +197,8 @@ def scene_spec(doc: dict, i: int, ev: Optional[List[tuple]] = None, looks: Optio
         fixed.append(["chip", str(cr["text"]), False])
     if s.get("caption"):
         fixed.append(["cap", str(s["caption"])])
+    if m.get("type") == "animation":
+        fixed.append(["card", str(s.get("text") or "")[:160]])
     runs: List[list] = []                        # [frames, key] run lengths
     for k in range(n):
         key = _layers_at(f0 + k, ev, fps, fixed)
@@ -306,6 +310,8 @@ def _compose(key: tuple) -> bytes:
                 im.alpha_composite(x)
         elif L[0] == "cap":
             im.alpha_composite(_caption(L[1]))
+        elif L[0] == "card":
+            im.alpha_composite(_card(L[1]))
         elif L[0] == "sub":
             x = gfx.subscribe(L[1] / fps, L[2] / fps)
             if x is not None:
@@ -331,6 +337,22 @@ def _caption(text: str):
     return lay
 
 
+def _card(text: str):
+    """A line with no picture: plain white words on the dark ground (quality.text_scene's scenes, the very last resort)."""
+    import textwrap
+    from PIL import Image, ImageDraw
+    from .sdkit import gfx
+    lay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    f = gfx.font(58, "Bold")
+    lines = textwrap.wrap(text, 44)[:4]
+    d = ImageDraw.Draw(lay)
+    y = H // 2 - 40 * len(lines)
+    for ln in lines:
+        d.text((W // 2, y), ln, font=f, fill=(255, 255, 255, 255), anchor="mm")
+        y += 80
+    return lay
+
+
 def _probe_wh(path: str) -> Tuple[int, int]:
     out = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height",
                           "-of", "csv=p=0:s=x", path], capture_output=True, text=True, timeout=120).stdout.strip()
@@ -342,6 +364,8 @@ def _probe_wh(path: str) -> Tuple[int, int]:
 
 
 def _input_args(spec: dict, n: int) -> List[str]:
+    if spec["kind"] == "animation":
+        return ["-f", "lavfi", "-i", f"color=c=0x0B1220:s={W}x{H}:r={spec['fps']}"]
     if spec["kind"] == "image":
         return ["-loop", "1", "-framerate", str(spec["fps"]), "-i", spec["src"]]
     return ["-ss", f"{float(spec['ss']):.3f}", "-i", spec["src"]]
@@ -542,7 +566,7 @@ def render_one(spec: dict, out: str, threads: int = 3) -> str:
     last = None
     for attempt in range(PIECE_TRIES):
         try:
-            w, h = _probe_wh(spec["src"]) if spec["kind"] == "video" else _image_wh(spec["src"])
+            w, h = _probe_wh(spec["src"]) if spec["kind"] == "video" else (W, H) if spec["kind"] == "animation" else _image_wh(spec["src"])
             if _needs_frames(spec):
                 _draw_frames(spec, w, h, tmp, threads)
             else:
@@ -692,7 +716,8 @@ def render_pieces(doc: dict, work: str, on_progress: Optional[Callable[[int, int
     for sp in specs:
         sp = dict(sp)
         key = spec_key(sp)                       # named by the link it was planned with, whatever disk it is on now
-        sp["src"] = localise(sp["src"], work)
+        if sp["kind"] != "animation":
+            sp["src"] = localise(sp["src"], work)
         if sp.get("dissolve"):
             sp["dissolve"] = {**sp["dissolve"], "src": localise(sp["dissolve"]["src"], work)}
         out = os.path.join(folder, key + ".mp4")
