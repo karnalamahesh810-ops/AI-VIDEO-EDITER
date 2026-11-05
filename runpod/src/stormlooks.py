@@ -280,7 +280,7 @@ def timeline(doc: dict, blocks: Sequence[dict], pauses: Sequence[dict], brief: O
             if len(tl["maps"]) >= MAP_MAX:
                 break
             at = find_phrase(words, str(name).split(",")[0], hook_end)
-            if at is None or at < hook_end + 8.0 or at + MAP_SECONDS > total - 5.0:
+            if at is None or at < hook_end + 3.0 or at + MAP_SECONDS > total - 5.0:
                 continue
             a = max(hook_end + 0.5, at - 0.6)
             if any(abs(a - m["t0"]) < 45.0 for m in tl["maps"]) or not track.free(a, a + MAP_SECONDS):

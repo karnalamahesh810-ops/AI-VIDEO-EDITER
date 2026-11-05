@@ -2963,6 +2963,10 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter,
         except Exception as e:  # noqa: BLE001 - the drawn video still ships
             sd = {"error": f"{type(e).__name__}: {str(e)[:300]}"}
             print(f"[stormdesk] after the render: {sd['error']}", flush=True)
+        if isinstance((doc["meta"].get("stormDesk") or {}).get("pieces"), dict):
+            sd["pieces"] = doc["meta"]["stormDesk"]["pieces"]
+        if (doc["meta"].get("stormDesk") or {}).get("engineFallback"):
+            sd["engineFallback"] = doc["meta"]["stormDesk"]["engineFallback"]
         doc["meta"].setdefault("stormDesk", {})["render"] = sd
         _storm_desk_done(doc, inp, work, sd)
     # What goes back with the video: the gate's report and, when it ran, the review's.
@@ -3208,6 +3212,7 @@ def _draw(doc: dict, inp: dict, work: str, report, split: bool, out_path: str, g
             print(f"[pieces] through Remotion: {why}", flush=True)
             doc.setdefault("meta", {}).setdefault("stormDesk", {})["engineFallback"] = why
         else:
+            events.phase("render")
             scope = str(inp.get("render_cache_scope") or inp.get("project_id") or "")
             early = _PRERENDER.pop(str(inp.get("project_id") or inp.get("_job_id") or ""), None)
             try:

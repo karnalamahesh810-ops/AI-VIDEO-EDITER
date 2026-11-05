@@ -184,12 +184,12 @@ class OpeningClipTests(unittest.TestCase):
 
     def test_open_clip_first_by_default_and_its_switch(self):
         end = self.words[-1].end
-        ps = stormdesk.plan_pauses(self.words, end)
+        ps = stormdesk.plan_pauses(self.words, end, {"hook_clips": 1})
         self.assertTrue(ps[0].get("open"))
         self.assertEqual((ps[0]["at"], ps[0]["secs"]), (0.0, stormdesk.OPEN_SECONDS))
         self.assertTrue(all(not p.get("open") for p in ps[1:]) and len(ps) >= 2)       # the middle pauses stay
         self.assertFalse(any(p.get("open") for p in stormdesk.plan_pauses(self.words, end, {"open_clip": False})))
-        short = stormdesk.plan_pauses(self.words, end, {"open_seconds": 2})
+        short = stormdesk.plan_pauses(self.words, end, {"open_seconds": 2, "hook_clips": 1})
         self.assertEqual(short[0]["secs"], stormdesk.OPEN_MIN)                        # 4-7 s
         self.assertEqual(stormdesk.out_pauses(ps)[0]["t0"], 0.0)
         self.assertTrue(stormdesk.out_pauses(ps)[0].get("open"))
@@ -219,8 +219,8 @@ class OpeningClipTests(unittest.TestCase):
             loud = make_clip(os.path.join(d, "loud.mp4"), 10.0, sound="noise", amp=0.9)
             soft = make_clip(os.path.join(d, "soft.mp4"), 10.0, sound="noise", amp=0.02)
             song = make_clip(os.path.join(d, "song.mp4"), 10.0, sound="chord", amp=0.9)
-            sc = [scene(0, 0, 4, "AAAAAAAAAAA", "Chan A", 10), scene(1, 4, 8, "BBBBBBBBBBB", "Chan B", 200),
-                  scene(2, 8, 12, "CCCCCCCCCCC", "Chan C", 300), scene(3, 12, 16, "DDDDDDDDDDD", "Chan D", 70)]
+            sc = [scene(0, 0, 4, "AAAAAAAAAAA", "KAAA News", 10), scene(1, 4, 8, "BBBBBBBBBBB", "KBBB News", 200),
+                  scene(2, 8, 12, "CCCCCCCCCCC", "KCCC News", 300), scene(3, 12, 16, "DDDDDDDDDDD", "KDDD News", 70)]
             files = {"yt:BBBBBBBBBBB": song, "yt:CCCCCCCCCCC": soft, "yt:DDDDDDDDDDD": loud}
             doc = doc_of(sc)
             asked = []

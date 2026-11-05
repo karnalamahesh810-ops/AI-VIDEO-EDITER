@@ -76,6 +76,7 @@ J_LEAD = 0.35                   # a pause's sound starts this much before its pi
 L_TAIL = 0.6                    # ... and fades out under the narration's first words after it (an L cut)
 HOOK_CLIPS = 3                  # the opening: this many clips (the laptop videos since lp9: HOOKS = [6.0, 7.76, 8.08]) ...
 HOOK_SECONDS = 20.0             # ... about this long together, each cut on its own sentence; the last dissolves into the story
+HOOK_CLIP_MAX = 9.0             # one hook clip at most (the laptop's: 6.0, 7.76, 8.08)
 PAUSE_MAX_SECONDS = 15.0        # a pause with someone talking runs as long as the sentence (the owner: up to ~15 s)
 PAUSE_MIN_SECONDS = 3.5
 TALK_PAD_BEFORE, TALK_PAD_AFTER = 0.15, 0.25   # a talking clip starts on the first word and ends after the last (word times)
@@ -1672,12 +1673,17 @@ def make_pauses(doc: dict, pauses: List[dict], work: str, fetch: Optional[Callab
             if listen is not None and float((sc.get("audio") or {}).get("speech") or 0.0) >= TALK_SPEECH_MIN:
                 # Someone talks: the clip plays whole sentences, on the voice's own word times (the owner: never mid-word).
                 try:
-                    win = talk_window(listen(got), _probe(got).get("duration") or 0.0, said)
+                    win = talk_window(listen(got), _probe(got).get("duration") or 0.0, said,
+                                      most=HOOK_CLIP_MAX if is_open else PAUSE_MAX_SECONDS)
                 except Exception as e:  # noqa: BLE001
                     print(f"[stormdesk] pause {k + 1}: words not read: {type(e).__name__}", flush=True)
                     win = None
                 if win is None:
                     print(f"[stormdesk] pause {k + 1}: {vid} @ {start:.0f}s turned down: no whole sentence in it", flush=True)
+                    return t, "", None
+                if win["fit"] <= 0.0:
+                    # A person talking about something else breaks the story (the first proof's hook: another dam project).
+                    print(f"[stormdesk] pause {k + 1}: {vid} @ {start:.0f}s turned down: what is said does not fit", flush=True)
                     return t, "", None
                 sc = {**sc, "offset": win["start"], "fitSecs": win["seconds"], "talk": win["text"],
                       "score": round(float(sc.get("score") or 0.0) + 0.3 * win["fit"], 3)}
@@ -2511,6 +2517,7 @@ def mark_channels(doc: dict, led: Any = None, earlier_channels: Optional[set] = 
     fps = int(doc.get("fps") or 30)
     rows: List[dict] = []
     per: Dict[str, int] = {}
+    shown: Dict[str, List[Tuple[float, float]]] = {}
     for i, s in enumerate(doc.get("scenes") or []):
         if (s.get("media") or {}).get("type") != "video" or is_ai(s) or not video_id(s).startswith("yt:"):
             continue
@@ -2526,6 +2533,10 @@ def mark_channels(doc: dict, led: Any = None, earlier_channels: Optional[set] = 
         mo = moment(s, fps)
         if not why and led is not None and mo and led.used(mo[0], mo[1], mo[2]):
             why = "a moment an earlier video used"
+        if mo:
+            if not why and any(min(mo[2], q) - max(mo[1], p) > stormledger.OVERLAP for p, q in shown.get(mo[0], [])):
+                why = "the same frames as an earlier shot"
+            shown.setdefault(mo[0], []).append((mo[1], mo[2]))
         if why and not s.get("natSound"):
             s["_reject"] = why
             rows.append({"shot": i, "why": why})
@@ -2542,10 +2553,16 @@ def apply_fits(doc: dict, pauses: List[dict], inp: dict, renarrate: Optional[Cal
     plan = inp.get("_storm_pauses") or []
     scenes = sorted(doc.get("scenes") or [], key=lambda s: int(s["startFrame"]))
     want: Dict[int, int] = {}
+    gone: List[int] = []
     for k, p in enumerate(pauses):
         s = next((x for x in scenes if x.get("natSound") and int(x["startFrame"]) <= int(round(p["t0"] * fps))
                   < int(x["startFrame"]) + int(x["durationInFrames"])), None)
-        if s is None or not s.get("_fitSecs"):
+        if s is None:
+            # No clip could fill it: the slot closes instead of the voice stopping over silent shots (the proof's hook).
+            gone.append(k)
+            want[k] = int(round(float(p["t0"]) * fps)) - int(round(float(p["t1"]) * fps))
+            continue
+        if not s.get("_fitSecs"):
             continue
         frames_now = int(round(float(p["t1"]) * fps)) - int(round(float(p["t0"]) * fps))
         target = int(round(float(s["_fitSecs"]) * fps))
@@ -2561,6 +2578,7 @@ def apply_fits(doc: dict, pauses: List[dict], inp: dict, renarrate: Optional[Cal
     new_plan = [dict(plan[i]) for i in order]
     for k, d in want.items():
         new_plan[k]["secs"] = round(float(new_plan[k]["secs"]) + d / float(fps), 4)
+    new_plan = [p for k, p in enumerate(new_plan) if k not in gone]
     url = renarrate(new_plan)
     if not url:
         return 0
@@ -2572,10 +2590,27 @@ def apply_fits(doc: dict, pauses: List[dict], inp: dict, renarrate: Optional[Cal
     for k in sorted(want, reverse=True):
         d, p = want[k], pauses[k]
         p0 = int(round(float(p["t0"]) * fps))
-        scene = next(x for x in scenes if x.get("natSound") and int(x["startFrame"]) <= p0 < int(x["startFrame"]) + int(x["durationInFrames"]))
-        cut = int(scene["startFrame"]) + int(scene["durationInFrames"])
-        scene["durationInFrames"] = int(scene["durationInFrames"]) + d
         secs = d / float(fps)
+        if k in gone:
+            p1 = int(round(float(p["t1"]) * fps))
+            keep = []
+            for s in doc["scenes"]:
+                a, b = int(s["startFrame"]), int(s["startFrame"]) + int(s["durationInFrames"])
+                if a >= p0 and b <= p1:
+                    continue                    # a shot inside the slot goes
+                if a < p0 < b <= p1:
+                    s["durationInFrames"] = p0 - a
+                elif p0 <= a < p1 < b:
+                    _trim_head(s, p1 - a, fps)
+                    s["startFrame"] = p1
+                keep.append(s)
+            doc["scenes"][:] = keep
+            scenes[:] = sorted(keep, key=lambda s: int(s["startFrame"]))
+            cut = p1
+        else:
+            scene = next(x for x in scenes if x.get("natSound") and int(x["startFrame"]) <= p0 < int(x["startFrame"]) + int(x["durationInFrames"]))
+            cut = int(scene["startFrame"]) + int(scene["durationInFrames"])
+            scene["durationInFrames"] = int(scene["durationInFrames"]) + d
         for s in scenes:
             if int(s["startFrame"]) >= cut:
                 s["startFrame"] = int(s["startFrame"]) + d
@@ -2586,6 +2621,8 @@ def apply_fits(doc: dict, pauses: List[dict], inp: dict, renarrate: Optional[Cal
         for q in pauses[k + 1:]:
             q["t0"], q["t1"] = round(float(q["t0"]) + secs, 3), round(float(q["t1"]) + secs, 3)
         doc["durationInFrames"] = int(doc.get("durationInFrames") or 0) + d
+    for k in sorted(gone, reverse=True):
+        del pauses[k]
     return len(want)
 
 
@@ -3344,9 +3381,11 @@ def after_render(doc: dict, out_path: str, work: str, resolve: Optional[Callable
     else:
         af = f"loudnorm=I={MASTER_LUFS}:TP={MASTER_TP}:LRA=11"
     tmp = out_path + ".sd.mp4"
-    cmd = ["ffmpeg", "-v", "error", "-y", "-i", out_path, "-i", wav, "-map", "0:v:0", "-map", "1:a:0",
-           "-c:v", "copy", "-bsf:v", "filter_units=remove_types=6", "-af", af + f",aresample={sr}",
-           "-c:a", "aac", "-b:a", "256k", "-ar", str(sr),
+    # The wav's layout is explicit: ffmpeg 5.1 (the worker's) refused "unknown" (2 channels) on the first real pieces render.
+    chain = f"aformat=channel_layouts=stereo,{af},aresample={sr},aformat=channel_layouts=stereo"
+    cmd = ["ffmpeg", "-v", "error", "-y", "-i", out_path, "-guess_layout_max", "2", "-i", wav, "-map", "0:v:0", "-map", "1:a:0",
+           "-c:v", "copy", "-bsf:v", "filter_units=remove_types=6", "-af", chain,
+           "-c:a", "aac", "-b:a", "256k", "-ar", str(sr), "-ac", "2",
            "-map_metadata", "-1", "-map_chapters", "-1", "-fflags", "+bitexact", "-flags:v", "+bitexact",
            "-flags:a", "+bitexact", "-metadata:s:v", "handler_name=VideoHandler",
            "-metadata:s:a", "handler_name=SoundHandler", "-metadata:s:v", "encoder=", "-metadata:s:a", "encoder=",
@@ -3357,7 +3396,15 @@ def after_render(doc: dict, out_path: str, work: str, resolve: Optional[Callable
         cmd2 = [c for c in cmd if c not in ("-bsf:v", "filter_units=remove_types=6")]
         p = subprocess.run(cmd2, capture_output=True, timeout=3600)
         if p.returncode != 0 or not os.path.isfile(tmp):
-            raise RuntimeError("storm desk mix failed: " + (p.stderr or b"")[-300:].decode("utf-8", "replace"))
+            # Last: the wav to AAC at the master's level in one plain pass, so the pauses keep their sound.
+            first_error = (p.stderr or b"")[-300:].decode("utf-8", "replace")
+            cmd3 = ["ffmpeg", "-v", "error", "-y", "-i", out_path, "-i", wav, "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy",
+                    "-af", f"loudnorm=I={MASTER_LUFS}:TP={MASTER_TP}:LRA=11", "-c:a", "aac", "-b:a", "256k", "-ar", str(sr), "-ac", "2",
+                    "-map_metadata", "-1", "-t", f"{total:.3f}", "-movflags", "+faststart", tmp]
+            p = subprocess.run(cmd3, capture_output=True, timeout=3600)
+            if p.returncode != 0 or not os.path.isfile(tmp):
+                raise RuntimeError("storm desk mix failed: " + first_error + " | " + (p.stderr or b"")[-200:].decode("utf-8", "replace"))
+            rep["mixFallback"] = first_error[:200]
         rep["seiStripped"] = False
     else:
         rep["seiStripped"] = True

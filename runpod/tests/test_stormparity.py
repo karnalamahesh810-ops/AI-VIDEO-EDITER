@@ -143,6 +143,21 @@ class FitTests(unittest.TestCase):
         self.assertEqual(d["scenes"][1]["startFrame"], 210)
         self.assertEqual(d["durationInFrames"], 300)
 
+    def test_a_slot_with_no_clip_closes(self):
+        d = doc_of([scene(0, 0, 200, "h", natSound=True, openClip=True), scene(1, 200, 100, "a"), scene(2, 300, 100, "b"),
+                    scene(3, 400, 200, "h3", natSound=True, openClip=True), scene(4, 600, 90, "c", words=[w("x", 20.5, 21.0)])])
+        pauses = [{"t0": 0.0, "t1": 200 / 30.0, "open": True}, {"t0": 200 / 30.0, "t1": 400 / 30.0, "open": True},
+                  {"t0": 400 / 30.0, "t1": 20.0, "open": True}]
+        inp = {"_storm_pauses": [{"at": 0.0, "secs": 200 / 30.0}, {"at": 0.0, "secs": 200 / 30.0}, {"at": 0.0, "secs": 200 / 30.0}]}
+        plans = []
+        self.assertEqual(stormdesk.apply_fits(d, pauses, inp, lambda p: plans.append(p) or "u"), 1)
+        self.assertEqual([s["id"] for s in d["scenes"]], ["s0", "s3", "s4"])
+        self.assertEqual([s["startFrame"] for s in d["scenes"]], [0, 200, 400])
+        self.assertEqual(d["durationInFrames"], 490)
+        self.assertEqual(len(pauses), 2)
+        self.assertEqual(len(plans[0]), 2)
+        self.assertAlmostEqual(d["scenes"][2]["words"][0]["start"], 20.5 - 200 / 30.0)
+
     def test_several_pauses_stay_in_step(self):
         d = doc_of([scene(0, 0, 210, "h", natSound=True, openClip=True, _fitSecs=5.0), scene(1, 210, 90, "b"),
                     scene(2, 300, 210, "p", natSound=True, _fitSecs=10.0), scene(3, 510, 60, "c")])
@@ -166,6 +181,10 @@ class ChannelRuleTests(unittest.TestCase):
         self.assertEqual(sorted(r["shot"] for r in rows), [2, 3, 4, 6])
         self.assertTrue(all(s.get("_reject") for s in (sc[2], sc[3], sc[4], sc[6])))
         self.assertFalse(sc[5].get("_reject"))
+
+    def test_the_same_frames_twice_are_marked(self):
+        sc = [scene(0, 0, 90, "x", at=10.0), scene(1, 90, 90, "y", at=5.0), scene(2, 180, 90, "x", at=11.0), scene(3, 270, 90, "x", at=60.0)]
+        self.assertEqual([r["shot"] for r in stormdesk.mark_channels(doc_of(sc))], [2])
 
     def test_a_creators_channel_never_fills_a_pause(self):
         self.assertFalse(stormdesk.pause_source_ok("Joe Drone Pilot"))
