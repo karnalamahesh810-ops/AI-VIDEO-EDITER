@@ -3101,14 +3101,17 @@ def nat_track(doc: dict, total: float, offset: float, sr: int = 48000, resolve: 
     track = np.zeros((n, 2), np.float32)
     rows = []
     pauses = (doc.get("meta") or {}).get("stormDesk", {}).get("pauses") or []
-    for s in doc.get("scenes") or []:
+    order = sorted(doc.get("scenes") or [], key=lambda x: int(x["startFrame"]))
+    for idx, s in enumerate(order):
         if not s.get("natSound"):
             continue
         url = str((s.get("media") or {}).get("url") or "")
         src = resolve(url) if resolve else url
         t0 = int(s["startFrame"]) / fps
         t1 = t0 + int(s["durationInFrames"]) / fps
-        win = next(((p["t0"], p["t1"]) for p in pauses if p["t0"] - 1.2 <= t0 <= p["t1"]), (t0, t1))
+        # Its own window: the one it starts inside first (hook clips sit edge to edge, one's end is the next one's start).
+        win = next(((p["t0"], p["t1"]) for p in pauses if p["t0"] - 0.05 <= t0 < p["t1"] - 0.05),
+                   next(((p["t0"], p["t1"]) for p in pauses if p["t0"] - 1.2 <= t0 <= p["t1"]), (t0, t1)))
         a, b = max(t0, win[0]), min(t1, win[1])
         if b - a < 0.5 or not src:
             continue
@@ -3117,6 +3120,11 @@ def nat_track(doc: dict, total: float, offset: float, sr: int = 48000, resolve: 
         trim0 = float((s.get("media") or {}).get("trimStart") or 0.0) + (a - t0)
         lead = min(J_LEAD, max(0.0, trim0)) if not s.get("openClip") else 0.0
         tail = L_TAIL
+        nxt = order[idx + 1] if idx + 1 < len(order) else None
+        if s.get("talk"):
+            lead, tail = 0.0, 0.0               # a talking clip starts and ends on its own words (the kit: no J/L for these)
+        elif nxt is not None and nxt.get("natSound"):
+            tail = 0.0                          # the next clip's own sound starts here
         a, b = a - lead, b + tail
         trim = trim0 - lead
         try:
@@ -3132,8 +3140,8 @@ def nat_track(doc: dict, total: float, offset: float, sr: int = 48000, resolve: 
         if m <= 0:
             continue
         g = np.ones(m, np.float32)
-        r_in = min(m // 2, int(max(NAT_FADE, lead) * sr))
-        r_out = min(m // 2, int(max(NAT_FADE, tail) * sr))
+        r_in = min(m // 2, int(max(0.04 if s.get("talk") else NAT_FADE, lead) * sr))
+        r_out = min(m // 2, int(max(0.06 if s.get("talk") else NAT_FADE, tail) * sr))
         if r_in:
             g[:r_in] = np.linspace(0, 1, r_in)
         if r_out:

@@ -295,6 +295,29 @@ class LooksTests(unittest.TestCase):
         self.assertEqual(tl["maps"], [])
 
 
+@unittest.skipUnless(shutil.which("ffmpeg"), "needs ffmpeg")
+class HookSoundTests(unittest.TestCase):
+    def test_every_hook_clip_plays_its_own_sound_edge_to_edge(self):
+        t = tempfile.mkdtemp()
+        try:
+            clip = os.path.join(t, "c.mp4")
+            subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=size=64x36:rate=30:duration=20", "-f", "lavfi",
+                            "-i", "anoisesrc=color=pink:amplitude=0.4:sample_rate=48000:duration=20", "-c:v", "libx264", "-preset", "ultrafast",
+                            "-c:a", "aac", "-shortest", clip], check=True)
+            sc = [scene(i, i * 180, 180, f"h{i}", natSound=True, openClip=True) for i in range(3)] + [scene(3, 540, 90, "s")]
+            for s in sc:
+                s["media"]["url"] = clip
+            sc[1]["talk"] = True
+            d = doc_of(sc)
+            d["meta"]["stormDesk"] = {"pauses": [{"t0": k * 6.0, "t1": (k + 1) * 6.0, "open": True} for k in range(3)]}
+            track, rows = stormdesk.nat_track(d, 21.0, 0.0)
+            self.assertEqual([r["ok"] for r in rows], [True, True, True])
+            self.assertEqual([round(r["seconds"], 1) for r in rows], [6.0, 6.0, 6.6])
+            self.assertEqual([r["tail"] for r in rows], [0.0, 0.0, 0.6])
+        finally:
+            shutil.rmtree(t, ignore_errors=True)
+
+
 class SoundTests(unittest.TestCase):
     def test_owner_levels(self):
         self.assertEqual(stormpieces.MUSIC_UNDER_VOICE_DB, 15.0)
