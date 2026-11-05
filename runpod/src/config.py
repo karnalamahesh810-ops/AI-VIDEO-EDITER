@@ -1989,6 +1989,12 @@ CUT_HOOK_FACTOR = float(os.getenv("CUT_HOOK_FACTOR", "0.85"))
 # starts within CROSS_VIDEO_GAP_SECONDS of it, nor a photo whose URL or
 # perceptual hash (within LEDGER_PHOTO_BITS of 64) matches. 0 days = off.
 CROSS_VIDEO_REUSE_DAYS = int(os.getenv("CROSS_VIDEO_REUSE_DAYS", "120"))
+# The Breaking News Desk's engine for a new plan (src/stormpieces.py): "pieces" = the laptop kit's render (one encode per shot,
+# Dark Horizon looks, only changed shots drawn again), "remotion" = as before. A job may choose (storm_desk.engine, or
+# {"config": {"STORM_DESK_ENGINE": ...}}); a timeline keeps the engine it was planned for.
+STORM_DESK_ENGINE = os.getenv("STORM_DESK_ENGINE", "pieces").strip()
+# Finished shots kept in R2 under sdpieces/<project>/, so a re-render on a new machine draws only what changed.
+STORM_PIECES_R2 = _flag("STORM_PIECES_R2", True)
 CROSS_VIDEO_GAP_SECONDS = float(os.getenv("CROSS_VIDEO_GAP_SECONDS", "30"))
 LEDGER_PHOTO_BITS = int(os.getenv("LEDGER_PHOTO_BITS", "6"))
 # The ledger is read in the background from the job's start; sourcing waits

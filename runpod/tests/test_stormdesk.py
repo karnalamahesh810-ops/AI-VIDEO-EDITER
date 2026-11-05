@@ -149,7 +149,7 @@ class PauseTests(unittest.TestCase):
         self.assertEqual(stormdesk.plan_pauses(self.words, end, {"pauses": 0, "open_clip": False}), [])
         self.assertEqual(stormdesk.plan_pauses(self.words, end, {"pauses": "off", "open_clip": False}), [])
         # The opening clip stays when the middle pauses are off (its own switch).
-        self.assertEqual([p.get("open") for p in stormdesk.plan_pauses(self.words, end, {"pauses": 0})], [True])
+        self.assertEqual([p.get("open") for p in stormdesk.plan_pauses(self.words, end, {"pauses": 0, "hook_clips": 1})], [True])
         two = stormdesk.plan_pauses(self.words, end, {"pauses": 2, "pause_seconds": 6, "open_clip": False})
         self.assertEqual(len(two), 2)
         self.assertEqual(two[0]["secs"], 6.0)
@@ -198,11 +198,11 @@ class PauseSceneTests(unittest.TestCase):
         d = tempfile.mkdtemp()
         try:
             clip = make_clip(os.path.join(d, "pause.mp4"), 8.0, audio=True)
-            sc = [scene(0, 0, 4, "AAAAAAAAAAA", "Chan A", 10),
-                  scene(1, 4, 9, "BBBBBBBBBBB", "Chan B", 50),
-                  scene(2, 9, 14, "CCCCCCCCCCC", "Chan C", 5, clip=6.0),
-                  scene(3, 14, 18, "DDDDDDDDDDD", "Chan D", 70),
-                  scene(4, 18, 22, "EEEEEEEEEEE", "Chan E", 20)]
+            sc = [scene(0, 0, 4, "AAAAAAAAAAA", "KAAA News", 10),
+                  scene(1, 4, 9, "BBBBBBBBBBB", "KBBB News", 50),
+                  scene(2, 9, 14, "CCCCCCCCCCC", "KCCC News", 5, clip=6.0),
+                  scene(3, 14, 18, "DDDDDDDDDDD", "KDDD News", 70),
+                  scene(4, 18, 22, "EEEEEEEEEEE", "KEEE News", 20)]
             doc = doc_of(sc)
             asked = []
 

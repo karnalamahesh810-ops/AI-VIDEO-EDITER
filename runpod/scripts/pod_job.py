@@ -296,6 +296,33 @@ def main() -> None:
             stop_this_pod(terminate=terminate)
             os._exit(3)
         threading.Thread(target=_deadline, daemon=True, name="pod-deadline").start()
+    # No stuck job (the owner, 2026-11-04): a job that has printed nothing for POD_STALL_SECONDS is hung, not slow. It says so
+    # in the app and the pod goes, instead of a page sitting at one percentage for hours.
+    stall = float(os.environ.get("POD_STALL_SECONDS", "") or (2400 if terminate else 0))
+    if stall > 0:
+        import threading
+
+        def _stall_watch():
+            while True:
+                time.sleep(60)
+                tail = getattr(handler, "LOG_TAIL", None)
+                last = float(getattr(tail, "last_write", 0.0) or 0.0)
+                if last and time.time() - last > stall:
+                    print(f"[pod] nothing for {int(stall // 60)} min: the job is stuck", flush=True)
+                    pid_ = ((globals().get("_JOB") or {}).get("input") or {}).get("project_id") or ""
+                    fields_ = {"status": "failed", "current_step": "Failed",
+                               "error_message": f"The video stopped making progress for {int(stall // 60)} minutes. Start it again."}
+                    try:
+                        if pid_ and storage.broker_enabled() and storage.CURRENT_JOB[0]:
+                            storage._broker_patch(pid_, storage.CURRENT_JOB[0], fields_)
+                        elif pid_:
+                            storage.patch_project(pid_, fields_, wait=True)
+                    except Exception as e:  # noqa: BLE001 - the app's own check sees the pod gone
+                        print(f"[pod] could not say so: {type(e).__name__}", flush=True)
+                    _cancel_chunks()
+                    stop_this_pod(terminate=terminate)
+                    os._exit(4)
+        threading.Thread(target=_stall_watch, daemon=True, name="pod-stall").start()
     try:
         job = load_job()
     except Exception as e:  # noqa: BLE001
@@ -305,6 +332,7 @@ def main() -> None:
         stop_this_pod(terminate=terminate)
         return
     inp = job.setdefault("input", {})
+    globals()["_JOB"] = job
     pid = inp.get("project_id") or ""
     action = str(inp.get("action") or "build").lower()
     # This script records the final status itself (one waited, retried write).

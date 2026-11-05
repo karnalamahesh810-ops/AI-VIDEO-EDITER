@@ -74,8 +74,13 @@ NAT_LUFS = -20.0                # a pause clip's sound before the master (the la
 NAT_FADE = 0.2
 J_LEAD = 0.35                   # a pause's sound starts this much before its picture (a J cut)
 L_TAIL = 0.6                    # ... and fades out under the narration's first words after it (an L cut)
-MUSIC_UNDER_VOICE_DB = 21.0     # the user's own track under the narration (the owner's Hoover / Sedona mix)
-MUSIC_SPEECH_DUCK_DB = 3.0      # ... and this much lower while a word is spoken
+HOOK_CLIPS = 3                  # the opening: this many clips (the laptop videos since lp9: HOOKS = [6.0, 7.76, 8.08]) ...
+HOOK_SECONDS = 20.0             # ... about this long together, each cut on its own sentence; the last dissolves into the story
+PAUSE_MAX_SECONDS = 15.0        # a pause with someone talking runs as long as the sentence (the owner: up to ~15 s)
+PAUSE_MIN_SECONDS = 3.5
+TALK_PAD_BEFORE, TALK_PAD_AFTER = 0.15, 0.25   # a talking clip starts on the first word and ends after the last (word times)
+MUSIC_UNDER_VOICE_DB = 15.0     # the user's own track under the narration (the owner's Hoover / Sedona mix)
+MUSIC_SPEECH_DUCK_DB = 2.0      # ... and this much lower while a word is spoken
 MASTER_LUFS, MASTER_TP = -14.0, -1.5
 SYNC_TOLERANCE = 0.25           # seconds the picture may differ from the timeline
 OPEN_SECONDS = 6.0              # the opening clip (the owner: 4-7 s of the most dramatic clip, its own sound)
@@ -87,6 +92,7 @@ UNDER_GAIN_MAX_DB = 12.0        # a very quiet clip is lifted at most this much 
 MIX_MARGIN_DB = 15.0            # the mix check: the clip sound under a word at least this far below the voice
 PAUSE_TRIES = 3                 # candidate clips fetched and scored for a pause (4 for the opening)
 PAUSE_SLACK = 4.0               # seconds fetched beyond the pause, to pick its best stretch
+TALK_SPEECH_MIN = 0.12          # at least this much speech: the clip is cut on sentences (talk_window)
 PAUSE_SPEECH_MAX = 0.6          # a pause clip talking more of the time than this is a report, not a reaction
 CLIP_SOUND_MODES = ("ambient", "off")
 
@@ -138,6 +144,9 @@ _STATES = {
 _LANDMARK_TYPES = {"landmark", "building", "monument", "place", "map", "document", "sign"}
 
 
+JOB_LEDGER = None                # this job's used moments (stormledger.Ledger), set by finish()
+
+
 def is_style(inp: Optional[dict] = None, doc: Optional[dict] = None) -> bool:
     from . import styles
     if inp is not None and styles.resolve(inp.get("video_style")) == STYLE:
@@ -171,6 +180,21 @@ def open_seconds(opts: Optional[dict]) -> float:
     return max(OPEN_MIN, min(OPEN_MAX, v))
 
 
+def hook_clips(opts: Optional[dict]) -> int:
+    """How many clips open the video (input.storm_desk.hook_clips, 1-4)."""
+    try:
+        return max(1, min(4, int((opts or {}).get("hook_clips") or HOOK_CLIPS)))
+    except (TypeError, ValueError):
+        return HOOK_CLIPS
+
+
+def hook_seconds(opts: Optional[dict]) -> float:
+    try:
+        return max(6.0, min(30.0, float((opts or {}).get("hook_seconds") or HOOK_SECONDS)))
+    except (TypeError, ValueError):
+        return HOOK_SECONDS
+
+
 def _originals_only() -> bool:
     try:
         from . import config
@@ -183,6 +207,9 @@ def blocklist(inp: Optional[dict]) -> List[str]:
     """The channels this job never uses: the owner's list for the style (and channels named like a compilation
     desk, but never the customer's own channel), plus the job's own."""
     names = list(DEFAULT_BLOCKLIST) if is_style(inp) else []
+    if names:
+        from . import stormledger
+        names += [n for n in stormledger.PERSONALITY if n not in names]
     if not names and _originals_only():
         # Original sources for every style (config.ORIGINALS_ONLY, 2026-11-03): the owner's never-list, the known
         # re-upload desks and every channel named like a compilation desk.
@@ -272,7 +299,11 @@ _ORIGINAL_NAMES = re.compile(
     r"fire (?:department|dept|district|rescue)|police|sheriff|county|city of|state of|department of|dept\.? of|"
     r"bureau of|water authority|emergency management|highway patrol|\bdot\b|national guard|coast guard|red cross|"
     r"associated press|reuters|afp|getty|storyful|viralhog|newsflare|jukin|cbs news|nbc news|abc news|cnn|"
-    r"bbc|pbs|npr|univision|telemundo)\b", re.I)
+    r"bbc|pbs|npr|univision|telemundo|"
+    # Newspapers, agencies and research groups (the kit's tools/channels.py): they film their own.
+    r"tribune|herald|gazette|chronicle|sentinel|courier|review-journal|deseret|azfamily|arizona republic|"
+    r"usbr|reclamation|blm|geological survey|university|smithsonian|water district|returning rapids|colorado river stories)\b",
+    re.I)
 # The words re-upload desks are named with; a name made mostly of them, with a weather / disaster word, is one.
 _DESK_WORDS = set("""
 weather storm storms stormwatch disaster disasters climate crisis severe extreme tornado tornadoes hurricane
@@ -500,8 +531,31 @@ def plan_pauses(words: Sequence, duration: float, opts: Optional[dict] = None) -
         return []
     mid = _mid_pauses(words, opts)
     if open_clip_on(opts):
-        return [{"at": 0.0, "secs": open_seconds(opts), "sentence": "", "open": True}] + mid
+        n = hook_clips(opts)
+        secs = hook_seconds(opts) / n if n > 1 else open_seconds(opts)
+        return [{"at": 0.0, "secs": round(secs, 3), "sentence": "", "open": True, "hook": k} for k in range(n)] + mid
     return mid
+
+
+_CARRIES_ON = re.compile(r"^(and|but|or|because|which|who|that|so that|as|while|though|although|since|if|then|plus|"
+                         r"instead|meaning|unless|until|when|where|also|too|it|they|he|she|this|these|those|its|their)\b", re.I)
+_NEW_POINT = re.compile(r"^(now|so|here's|here is|meanwhile|next|today|tonight|this week|last week|on (monday|tuesday|wednesday|"
+                        r"thursday|friday|saturday|sunday)|the (next|other|bigger|real|question)|what|why|how|where|for|over|in|at|"
+                        r"between|back|even|still)\b", re.I)
+
+
+def natural_stop(sent: dict, nxt: dict) -> float:
+    """How clean a stop this sentence end is, 0 to 1. 0 = never pause here: a question waiting for its answer, or a next
+    sentence that leans on this one (the owner: never mid-topic, only right after a point is finished). A longer breath
+    in the voiceover and a next sentence that opens a new point are what a finished point sounds like."""
+    text, after = str(sent.get("text") or "").strip(), str(nxt.get("text") or "").strip()
+    if not text or text.endswith((":", ",", ";", "?")):
+        return 0.0
+    if _CARRIES_ON.match(after):
+        return 0.0
+    gap = max(0.0, float(nxt.get("start") or 0.0) - float(sent.get("end") or 0.0))
+    score = 0.35 + min(0.4, gap / 1.5) + (0.25 if _NEW_POINT.match(after) else 0.0)
+    return round(min(1.0, score), 3)
 
 
 def _mid_pauses(words: list, opts: dict) -> List[dict]:
@@ -518,9 +572,13 @@ def _mid_pauses(words: list, opts: dict) -> List[dict]:
         nxt = sents[k + 1]
         if s["end"] < PAUSE_FIRST_MIN or s["end"] > end_of_talk - PAUSE_TAIL:
             continue
+        stop = natural_stop(s, nxt)
+        if stop <= 0.0:
+            continue                            # mid-topic: the next sentence carries on from this one
         cut = min(s["end"] + 0.25, (s["end"] + nxt["start"]) / 2.0)
         prev = sents[k - 1]["text"] if k else ""
-        cands.append({"at": round(cut, 3), "score": _drama(s["text"]) + 0.4 * _drama(prev), "sentence": s["text"]})
+        cands.append({"at": round(cut, 3), "score": stop + _drama(s["text"]) + 0.4 * _drama(prev),
+                      "sentence": s["text"]})
     if not cands:
         return []
     picked: List[dict] = []
@@ -643,7 +701,7 @@ def prepare_narration(inp: dict, words: list, audio_path: str, duration: float, 
     added = sum(float(p["secs"]) for p in pauses)
     where = ", ".join("%.1fs" % float(p["at"]) for p in pauses)
     print(f"[stormdesk] {len(pauses)} natural-sound pause(s) at {where} (+{added:.0f} s)", flush=True)
-    return {"words": shift_words(words, pauses), "path": audio_path, "url": url,
+    return {"words": shift_words(words, pauses), "path": audio_path, "url": url, "original": keep,
             "duration": float(duration) + added, "pauses": pauses}
 
 
@@ -1153,7 +1211,7 @@ def crop_bottom(path: str, keep: float) -> bool:
         return False
 
 
-def clean_check(doc: dict, read: Optional[Callable] = None, crop: Optional[Callable] = None) -> List[dict]:
+def clean_check(doc: dict, read: Optional[Callable] = None, crop: Optional[Callable] = None, virtual: bool = False) -> List[dict]:
     """
     Every narration and pause clip read on 3 frames: other outlets' text (text_verdict) cropped out when it
     sits only in the bottom band, else the shot marked for replacement (scene["_reject"]); a shot far softer than
@@ -1176,8 +1234,33 @@ def clean_check(doc: dict, read: Optional[Callable] = None, crop: Optional[Calla
             continue
         if path in cropped:
             s.setdefault("stormDesk", {})["cropped"] = cropped[path]
+            if virtual:
+                s["stormDesk"]["mode"] = f"news{cropped[path]}@0.0"
             continue
-        v = text_verdict(fr, int(_probe(path).get("h") or 1080))
+        src_h = int(_probe(path).get("h") or 1080)
+        ch = str(_sm(s).get("channel") or "")
+        crop_mode = station_crop(ch) if virtual else ""
+        if crop_mode:
+            # What the viewer sees of a station's frame is its crop: the check reads that, not the banner it drops.
+            k0, top0 = _crop_k(crop_mode), _crop_top(crop_mode)
+            v = text_verdict(crop_frames(fr, k0, top0), int(src_h * k0))
+            if v["action"] != "keep" and k0 > 0.68:
+                k0, top0 = 0.68, 0.02           # its corner bug sits further in (KUTV): the tighter crop
+                v = text_verdict(crop_frames(fr, k0, top0), int(src_h * k0))
+                if v["action"] == "keep":
+                    s.setdefault("stormDesk", {})["mode"] = f"news{k0}@{top0}"
+                    rows.append({"shot": i, "why": "station text in the crop", "action": "tighter crop"})
+        else:
+            v = text_verdict(fr, src_h)
+        if v["action"] == "crop" and virtual:
+            # No file is changed: the pieces engine crops when it draws. The crop must leave no text behind.
+            after = text_verdict(crop_frames(fr, float(v["keep"]), 0.0), int(src_h * float(v["keep"])))
+            if after["action"] == "keep":
+                cropped[path] = round(float(v["keep"]), 3)
+                s.setdefault("stormDesk", {}).update({"cropped": cropped[path], "mode": f"news{cropped[path]}@0.0"})
+                rows.append({"shot": i, "why": v["why"], "action": f"cropped to {int(v['keep'] * 100)}% height"})
+                continue
+            v = {"action": "reject", "why": v["why"] + " (still text after the crop)"}
         if v["action"] == "crop":
             if crop(path, v["keep"]) and text_verdict(read(path, float(m.get("trimStart") or 0.0), int(
                     s["durationInFrames"]) / float(fps)))["action"] == "keep":
@@ -1389,7 +1472,7 @@ def _relevance(scene: dict) -> float:
 
 
 def pause_score(path: str, secs: float, title: str = "", relevance: float = 0.5,
-                classify: Optional[Callable] = None) -> Optional[dict]:
+                classify: Optional[Callable] = None, talk_ok: bool = False) -> Optional[dict]:
     """
     How good a fetched clip is as a natural-sound pause, and its best `secs`-long stretch: {"score", "offset",
     "audio" (clipaudio.classify), "energy", "motion"} or {"reject": why}. Strong, lively natural sound (its level
@@ -1407,7 +1490,7 @@ def pause_score(path: str, secs: float, title: str = "", relevance: float = 0.5,
     kind = info.get("kind")
     if kind in ("music", "silent", "unknown"):
         return {"reject": f"its sound is {kind}", "audio": info}
-    if float(info.get("speech") or 0.0) >= PAUSE_SPEECH_MAX:
+    if float(info.get("speech") or 0.0) >= PAUSE_SPEECH_MAX and not talk_ok:
         # Talking all the way through: a reporter or an interview, not an eyewitness reacting (the Las Vegas run's
         # pause on a station's report).
         return {"reject": "talking all the way through", "audio": info}
@@ -1442,11 +1525,74 @@ def pause_score(path: str, secs: float, title: str = "", relevance: float = 0.5,
             "motion": round(best[3], 3), "audio": info}
 
 
+def pause_source_ok(channel: str) -> bool:
+    """Who may fill a pause or the hook: stations and agencies, never a person's own channel (the owner's creator rule),
+    a vlog, a re-uploader or an unknown uploader."""
+    from . import stormledger
+    return source_kind(channel) in ("station", "original") and not stormledger.is_personality(channel)
+
+
+_STOP = set("""a an and are as at be but by for from has have he her his in is it its of on or our she so that the their they
+this to was we were what when where which who will with would you your""".split())
+
+
+def fit_to_words(said: str, text: str) -> float:
+    """How much of what the clip says or is called was just said: 0 to 1 (the owner: it must fit what was just said)."""
+    def keys(t: str) -> set:
+        return {w for w in re.findall(r"[a-z0-9']+", str(t or "").lower()) if len(w) > 2 and w not in _STOP}
+    a, b = keys(said), keys(text)
+    if not a or not b:
+        return 0.0
+    return round(min(1.0, len(a & b) / float(min(len(a), len(b), 6))), 3)
+
+
+def talk_window(words: Sequence, clip_seconds: float, said: str = "", most: float = PAUSE_MAX_SECONDS,
+                least: float = PAUSE_MIN_SECONDS) -> Optional[dict]:
+    """
+    Where a talking clip plays: whole sentences only, from the first word of one to the last word of one, padded a little,
+    at most `most` s. A sentence the fetch cut (it touches the clip's start or end) never plays. Prefers what fits `said`,
+    then a full-length quote. {"start", "seconds", "text", "fit"} or None.
+    """
+    words = [w for w in (words or []) if _text(w).strip()]
+    if not words:
+        return None
+    sents = sentences(words)
+    whole = []
+    for k, s in enumerate(sents):
+        if k == 0 and s["start"] < 0.2:
+            continue                            # the fetch started inside this sentence
+        if s["end"] > clip_seconds - 0.4:
+            continue                            # ... or ended inside this one
+        if not re.search(r"[.!?][\"')\]]*$", str(s["text"]).strip()):
+            continue
+        whole.append((k, s))
+    best = None
+    for i in range(len(whole)):
+        for j in range(i, len(whole)):
+            if whole[j][0] - whole[i][0] != j - i:
+                break                           # sentences that follow each other only
+            a = max(0.0, whole[i][1]["start"] - TALK_PAD_BEFORE)
+            b = min(clip_seconds, whole[j][1]["end"] + TALK_PAD_AFTER)
+            if b - a > most:
+                break
+            if b - a < least:
+                continue
+            text = " ".join(str(x[1]["text"]) for x in whole[i:j + 1])
+            fit = fit_to_words(said, text)
+            score = fit + min(1.0, (b - a) / 10.0) * 0.3
+            if best is None or score > best[0]:
+                best = (score, a, b, text, fit)
+    if best is None:
+        return None
+    return {"start": round(best[1], 3), "seconds": round(best[2] - best[1], 3), "text": best[3][:300], "fit": best[4]}
+
+
 def make_pauses(doc: dict, pauses: List[dict], work: str, fetch: Optional[Callable] = None,
                 frame_vertical: Optional[Callable[[str], bool]] = None,
                 check: Optional[Callable[[str], str]] = None,
                 spare_pool: Optional[Callable[[dict], List[dict]]] = None,
-                spare_take: Optional[Callable[[dict], bool]] = None) -> List[dict]:
+                spare_take: Optional[Callable[[dict], bool]] = None,
+                listen: Optional[Callable[[str], Sequence]] = None) -> List[dict]:
     """
     Each pause window becomes one scene: a continuous clip with its own sound (scene.natSound), cut from a
     source this block already uses, at a moment no shot shows, never the source of the shot before or after it.
@@ -1454,6 +1600,7 @@ def make_pauses(doc: dict, pauses: List[dict], work: str, fetch: Optional[Callab
     plan's shots (silent but for the music) and says so in its row. Returns one row per pause.
     """
     fps = int(doc.get("fps") or 30)
+    first_words = [w for s in doc["scenes"] for w in (s.get("words") or [])][:40]    # what a hook clip must fit
     fetch = fetch or (lambda v, s, d: _default_fetch(v, s, d, work))
     check = check or _default_check
     gap = _moment_gap()
@@ -1464,6 +1611,9 @@ def make_pauses(doc: dict, pauses: List[dict], work: str, fetch: Optional[Callab
         mo = moment(s, fps)
         if mo:
             used.setdefault(mo[0], []).append((mo[1], mo[2]))
+    if JOB_LEDGER is not None:
+        for v, ranges in JOB_LEDGER.by_src.items():
+            used.setdefault("yt:" + v, []).extend(ranges)   # no pause or hook from a moment of an earlier video
     for k, p in enumerate(pauses):
         p0, p1 = int(round(p["t0"] * fps)), int(round(p["t1"] * fps))
         # The shots either side of the pause once the window is cleared (a shot across an edge is trimmed to it).
@@ -1488,12 +1638,12 @@ def make_pauses(doc: dict, pauses: List[dict], work: str, fetch: Optional[Callab
             if not mo or mo[0] in seen:
                 continue
             seen.add(mo[0])
-            if source_kind(_sm(c).get("channel") or "") not in ("station", "original", "creator"):
-                continue                        # never a re-uploader's (or an unknown uploader's) clip
+            if not pause_source_ok(_sm(c).get("channel") or ""):
+                continue                        # never a re-uploader's, an unknown uploader's or a person's own channel's
             key = source_key(c)
             if key and key in (prev_key, next_key):
                 continue                        # never two shots in a row from one source
-            want = secs + PAUSE_SLACK
+            want = max(secs, PAUSE_MAX_SECONDS) + PAUSE_SLACK
             start = pause_start(used.get(mo[0], []), want, video_seconds(mo[0]), gap)
             if start is None:
                 continue
@@ -1505,18 +1655,32 @@ def make_pauses(doc: dict, pauses: List[dict], work: str, fetch: Optional[Callab
         def fetch_one(t: Tuple[dict, str, float]):
             c, vid, start = t
             try:
-                got = fetch(vid, start, secs + PAUSE_SLACK)
+                got = fetch(vid, start, max(secs, PAUSE_MAX_SECONDS) + PAUSE_SLACK)
             except Exception as e:  # noqa: BLE001
                 print(f"[stormdesk] pause {k + 1}: {type(e).__name__}: {str(e)[:120]}", flush=True)
                 return t, "", None
             if not got or not _audible(got):
                 return t, "", None
             title = source_title(c)
-            sc = pause_score(got, secs, title=title, relevance=_relevance(c))
+            said = p.get("sentence", "") or " ".join(str(w.get("text") or "") for w in first_words)
+            sc = pause_score(got, secs, title=title, relevance=max(_relevance(c), fit_to_words(said, title)),
+                             talk_ok=listen is not None)
             if sc is None or sc.get("reject"):
                 print(f"[stormdesk] pause {k + 1}: {vid} @ {start:.0f}s turned down: "
                       f"{(sc or {}).get('reject') or 'unreadable'}", flush=True)
                 return t, "", None
+            if listen is not None and float((sc.get("audio") or {}).get("speech") or 0.0) >= TALK_SPEECH_MIN:
+                # Someone talks: the clip plays whole sentences, on the voice's own word times (the owner: never mid-word).
+                try:
+                    win = talk_window(listen(got), _probe(got).get("duration") or 0.0, said)
+                except Exception as e:  # noqa: BLE001
+                    print(f"[stormdesk] pause {k + 1}: words not read: {type(e).__name__}", flush=True)
+                    win = None
+                if win is None:
+                    print(f"[stormdesk] pause {k + 1}: {vid} @ {start:.0f}s turned down: no whole sentence in it", flush=True)
+                    return t, "", None
+                sc = {**sc, "offset": win["start"], "fitSecs": win["seconds"], "talk": win["text"],
+                      "score": round(float(sc.get("score") or 0.0) + 0.3 * win["fit"], 3)}
             why = check(got)
             if why:
                 print(f"[stormdesk] pause {k + 1}: {vid} @ {start:.0f}s turned down: {why}", flush=True)
@@ -1539,6 +1703,8 @@ def make_pauses(doc: dict, pauses: List[dict], work: str, fetch: Optional[Callab
                 vid = f"yt:{e.get('vid')}" if e.get("vid") else ""
                 ep = str(e.get("path") or "")
                 if not vid or not ep or not os.path.isfile(ep) or vid in seen:
+                    continue
+                if e.get("channel") and not pause_source_ok(str(e.get("channel"))):
                     continue
                 if any(source_key(x) in (prev_key, next_key) for x in scenes if video_id(x) == vid):
                     continue
@@ -1595,6 +1761,8 @@ def make_pauses(doc: dict, pauses: List[dict], work: str, fetch: Optional[Callab
                       "trimStart": round(offset, 3), "clipAudio": sc.get("audio") or {}},
             "semanticMetadata": sm, "reviewRequired": False, "reviewReason": "",
             **({"openClip": True} if is_open else {}),
+            **({"_fitSecs": float(sc["fitSecs"])} if sc.get("fitSecs") else {}),
+            **({"talk": True, "_talkText": str(sc.get("talk") or "")[:300]} if sc.get("talk") else {}),
         }
         # The window: shots inside go, shots across its edges are trimmed to it.
         keep: List[dict] = []
@@ -2243,7 +2411,9 @@ def graphics(doc: dict, inp: dict, blocks: List[dict], brief: Optional[dict], ki
     place = str(opts.get("location") or "").strip() or place_chip(((brief or {}).get("places") or [""])[0])
     loc = None
     if place and opts.get("location_tag", True) is not False:
-        loc = {"startFrame": int(LOC_FROM * fps), "durationInFrames": int((LOC_TO - LOC_FROM) * fps),
+        hook_end = max((int(s["startFrame"]) + int(s["durationInFrames"]) for s in doc.get("scenes") or [] if s.get("openClip")),
+                       default=0)
+        loc = {"startFrame": hook_end + int(LOC_FROM * fps), "durationInFrames": int((LOC_TO - LOC_FROM) * fps),
                "place": place_chip(place) or place[:32], "date": str(opts.get("date") or "").strip()[:20]
                or date_chip(day)}
     subs = []
@@ -2259,7 +2429,9 @@ def graphics(doc: dict, inp: dict, blocks: List[dict], brief: Optional[dict], ki
     if isinstance(inp.get("channel_watermark"), dict):
         name = str(opts.get("channel_name") or inp["channel_watermark"].get("text") or "").strip()
     return {"version": 1, "colors": colors(inp, kit), "logo": {"url": logo_url, "text": name[:24]},
-            "bug": {"opacity": 0.9}, "lowerThirds": lts, "location": loc, "subscribe": subs, "credits": True,
+            "bug": {"opacity": 0.9}, "lowerThirds": lts, "location": loc, "subscribe": subs,
+            # The owner (2026-11-03): no source names on screen; the sources go in the description (report creditsText).
+            "credits": opts.get("credits") is True,
             "clipSound": {"mode": clip_sound_mode(opts), "underVoiceDb": UNDER_VOICE_DB, "duckDb": UNDER_DUCK_DB},
             "sideLogo": opts.get("side_logo", True) is not False}
 
@@ -2280,6 +2452,13 @@ def music_level(doc: dict) -> Optional[dict]:
     doc["music"] = music
     bgm["volume"] = level
     return {"level": level, "duck": music["duck"], "voiceLufs": voice, "trackLufs": track}
+
+
+def reuse_gate(doc: dict, led: Any = None) -> dict:
+    """The gate before the render (tools/reusecheck.py): what still reuses a moment. {"earlier": [...], "same": [...]}"""
+    from . import stormledger
+    g = stormledger.gate(doc, led or stormledger.Ledger([]), moment)
+    return {"earlier": g["earlier"][:60], "same": g["same"][:60]}
 
 
 def contact_sheet(doc: dict, thumbs: Dict[int, Any], out: str, cols: int = 8) -> str:
@@ -2311,9 +2490,229 @@ def contact_sheet(doc: dict, thumbs: Dict[int, Any], out: str, cols: int = 8) ->
     return out
 
 
+def mark_channels(doc: dict, led: Any = None, earlier_channels: Optional[set] = None) -> List[dict]:
+    """
+    The owner's creator rule (tools/channels.py + tools/reusecheck.py) and the ledger, on the shots as they stand: a vlog or
+    personality channel never; a person's own channel at most 2 shots a video, never in a pause or the hook; a moment of an
+    earlier video never. Marks scene["_reject"] so replace_stills swaps them. Returns one row per shot marked.
+    """
+    from . import stormledger
+    fps = int(doc.get("fps") or 30)
+    rows: List[dict] = []
+    per: Dict[str, int] = {}
+    for i, s in enumerate(doc.get("scenes") or []):
+        if (s.get("media") or {}).get("type") != "video" or is_ai(s) or not video_id(s).startswith("yt:"):
+            continue
+        ch = str(_sm(s).get("channel") or "")
+        why = ""
+        if stormledger.is_personality(ch):
+            why = f"a personality channel ({ch[:40]})"
+        elif source_kind(ch) == "creator":
+            cap = stormledger.CREATOR_SHOTS_REPEAT if ch in (earlier_channels or ()) else stormledger.CREATOR_SHOTS
+            per[ch] = per.get(ch, 0) + 1
+            if per[ch] > cap:
+                why = f"creator {ch[:40]}: over {cap} shots"
+        mo = moment(s, fps)
+        if not why and led is not None and mo and led.used(mo[0], mo[1], mo[2]):
+            why = "a moment an earlier video used"
+        if why and not s.get("natSound"):
+            s["_reject"] = why
+            rows.append({"shot": i, "why": why})
+    return rows
+
+
+def apply_fits(doc: dict, pauses: List[dict], inp: dict, renarrate: Optional[Callable[[List[dict]], str]] = None) -> int:
+    """
+    A pause's length follows its clip (the owner: "the break length follows the clip"): a talking clip's sentences set it. The
+    pause scene changes length, everything after it moves, and the narration is padded again to match. Without a new narration
+    file (no `renarrate`, or it failed) nothing moves: the clip plays its slot's length and says so. Returns the pauses changed.
+    """
+    fps = int(doc.get("fps") or 30)
+    plan = inp.get("_storm_pauses") or []
+    scenes = sorted(doc.get("scenes") or [], key=lambda s: int(s["startFrame"]))
+    want: Dict[int, int] = {}
+    for k, p in enumerate(pauses):
+        s = next((x for x in scenes if x.get("natSound") and int(x["startFrame"]) <= int(round(p["t0"] * fps))
+                  < int(x["startFrame"]) + int(x["durationInFrames"])), None)
+        if s is None or not s.get("_fitSecs"):
+            continue
+        frames_now = int(round(float(p["t1"]) * fps)) - int(round(float(p["t0"]) * fps))
+        target = int(round(float(s["_fitSecs"]) * fps))
+        if target != frames_now:
+            want[k] = target - frames_now
+    for s in scenes:
+        s.pop("_fitSecs", None)
+    if not want:
+        return 0
+    if renarrate is None or len(plan) != len(pauses):
+        return 0
+    order = sorted(range(len(plan)), key=lambda i: float(plan[i]["at"]))
+    new_plan = [dict(plan[i]) for i in order]
+    for k, d in want.items():
+        new_plan[k]["secs"] = round(float(new_plan[k]["secs"]) + d / float(fps), 4)
+    url = renarrate(new_plan)
+    if not url:
+        return 0
+    inp["_storm_pauses"] = new_plan
+    inp["_storm_narration"] = url
+    if isinstance(doc.get("audio"), dict):
+        doc["audio"]["url"] = url
+    # From the last pause back, so each scene moves by what comes before it only once.
+    for k in sorted(want, reverse=True):
+        d, p = want[k], pauses[k]
+        p0 = int(round(float(p["t0"]) * fps))
+        scene = next(x for x in scenes if x.get("natSound") and int(x["startFrame"]) <= p0 < int(x["startFrame"]) + int(x["durationInFrames"]))
+        cut = int(scene["startFrame"]) + int(scene["durationInFrames"])
+        scene["durationInFrames"] = int(scene["durationInFrames"]) + d
+        secs = d / float(fps)
+        for s in scenes:
+            if int(s["startFrame"]) >= cut:
+                s["startFrame"] = int(s["startFrame"]) + d
+                for w in s.get("words") or []:
+                    w["start"] = float(w.get("start", 0.0)) + secs
+                    w["end"] = float(w.get("end", 0.0)) + secs
+        p["t1"] = round(float(p["t1"]) + secs, 3)
+        for q in pauses[k + 1:]:
+            q["t0"], q["t1"] = round(float(q["t0"]) + secs, 3), round(float(q["t1"]) + secs, 3)
+        doc["durationInFrames"] = int(doc.get("durationInFrames") or 0) + d
+    return len(want)
+
+
+_CAPTION_ASK = ("You write one small white caption for each short clip in a news video: what the clip shows, 3 to 8 plain words, "
+                "sentence case, no full stop. Use only the words given (what the narrator just said, the clip's title, what is "
+                "said in it). Never add a number, a name or a place that is not given. Answer JSON: "
+                "{\"captions\":[{\"i\":<clip>,\"text\":\"...\"}]}")
+
+
+def write_captions(doc: dict, ask: Optional[Callable] = None) -> int:
+    """scene.caption for the pause and hook clips (the kit's CAPTIONS). Checked: no digit that was not given. No model: none."""
+    rows = []
+    clips = [s for s in doc.get("scenes") or [] if s.get("natSound") and not s.get("openClip")]
+    if not ask or not clips:
+        return 0
+    for i, s in enumerate(clips):
+        before = [x for x in doc["scenes"] if int(x["startFrame"]) < int(s["startFrame"])]
+        said = " ".join(str(x.get("text") or "") for x in before[-2:])[-240:]
+        rows.append({"i": i, "said": said, "title": source_title(s)[:120], "spoken": str(s.get("_talkText") or "")[:200]})
+    raw = ask(_CAPTION_ASK, {"clips": rows})
+    got = raw if isinstance(raw, dict) else json.loads(raw or "{}")
+    n = 0
+    for x in got.get("captions") or []:
+        try:
+            i, text = int(x["i"]), re.sub(r"\s+", " ", str(x["text"])).strip().rstrip(".")
+            src = " ".join(str(rows[i][k]) for k in ("said", "title", "spoken"))
+        except (KeyError, TypeError, ValueError, IndexError):
+            continue
+        if not text or len(text) > 60 or any(d not in src for d in re.findall(r"\d+", text)):
+            continue
+        clips[i]["caption"] = text
+        n += 1
+    for s in clips:
+        s.pop("_talkText", None)
+    return n
+
+
+def credits_text(doc: dict) -> str:
+    """The description's credits: every source, once (no source names on screen)."""
+    seen, out = set(), []
+    for s in doc.get("scenes") or []:
+        if (s.get("media") or {}).get("type") not in ("video", "image") or is_ai(s):
+            continue
+        name = credit_name(s)
+        url = str(_sm(s).get("sourceUrl") or "").split("&t=")[0]
+        if name and (name, url) not in seen:
+            seen.add((name, url))
+            out.append(f"{name}: {url}" if url else name)
+    return "\n".join(out)
+
+
+def set_modes(doc: dict, marks_by_path: Dict[str, List[List[float]]]) -> None:
+    """How the pieces engine frames each shot: a station's crop (its lower third, corner bug and ticker gone) and the small
+    marks painted out (fitted tight, from the pixels around them). Nothing is baked into the clip file."""
+    for s in doc.get("scenes") or []:
+        if (s.get("media") or {}).get("type") != "video" or is_ai(s):
+            continue
+        sd = s.setdefault("stormDesk", {})
+        ch = str(_sm(s).get("channel") or "")
+        want = station_crop(ch)
+        have = str(sd.get("mode") or "")
+        if want and (not have or _crop_k(want) < _crop_k(have)):
+            sd["mode"] = want
+        path = _local(s) or str((s.get("media") or {}).get("url") or "")
+        boxes = marks_by_path.get(path) or []
+        if boxes:
+            sd["delogo"] = _visible_marks(boxes, str(sd.get("mode") or ""))
+
+
+def station_crop(channel: str) -> str:
+    """A station's crop, or "" for anyone else. Most stations: 0.76 from the top (lower third + ticker + corner bug gone);
+    KUTV's clock bug sits further in (the owner's Lake Mead videos: 0.68)."""
+    if not is_station(channel):
+        return ""
+    for name, mode in STATION_CROPS:
+        if name in str(channel).upper():
+            return mode
+    return "news0.76@0.0"
+
+
+STATION_CROPS = (("KUTV", "news0.68@0.02"),)
+
+
+def _crop_k(mode: str) -> float:
+    m = re.match(r"news([\d.]+)", str(mode))
+    return float(m.group(1)) if m else 1.0
+
+
+def _crop_top(mode: str) -> float:
+    m = re.match(r"news[\d.]+@([\d.]+)", str(mode))
+    return float(m.group(1)) if m else 0.03
+
+
+def crop_frames(fr: list, k: float, top: float = 0.0) -> list:
+    """Frames as a newsK@TOP crop shows them: for the text check, without touching the clip."""
+    out = []
+    for f in fr:
+        h, w = f.shape[:2]
+        y0, x0 = int(h * top), int(w * (1 - k) / 2)
+        out.append(f[y0:y0 + int(h * k), x0:x0 + int(w * k)])
+    return out
+
+
+def _visible_marks(boxes: List[List[float]], mode: str) -> List[List[float]]:
+    """Marks a crop already removes need no paint-out."""
+    if not mode.startswith("news"):
+        return boxes
+    k, top = _crop_k(mode), _crop_top(mode)
+    x0, x1, y0, y1 = (1 - k) / 2, (1 + k) / 2, top, top + k
+    return [b for b in boxes if b[0] < x1 and b[0] + b[2] > x0 and b[1] < y1 and b[1] + b[3] > y0]
+
+
+def set_hook_tail(doc: dict) -> bool:
+    """The last hook clip plays on for 0.6 s under the first narrated shot, so the hook dissolves into the story (the kit's
+    tools/hooktail.py). False when that clip has no 0.6 s left."""
+    fps = int(doc.get("fps") or 30)
+    sc = sorted(doc.get("scenes") or [], key=lambda s: int(s["startFrame"]))
+    hooks = [s for s in sc if s.get("openClip")]
+    if not hooks:
+        return False
+    last = hooks[-1]
+    after = next((s for s in sc if int(s["startFrame"]) >= int(last["startFrame"]) + int(last["durationInFrames"])), None)
+    m = last.get("media") or {}
+    if after is None or (after.get("media") or {}).get("type") != "video":
+        return False
+    ss = float(m.get("trimStart") or 0.0) + int(last["durationInFrames"]) / float(fps)
+    if float(m.get("clipSeconds") or 0.0) - ss < 0.6:
+        return False
+    after["hookTail"] = {"src": str(m.get("url") or ""), "ss": round(ss, 3), "mode": str((last.get("stormDesk") or {}).get("mode") or "full"),
+                         "delogo": (last.get("stormDesk") or {}).get("delogo") or []}
+    return True
+
+
 def finish(doc: dict, inp: dict, brief: Optional[dict] = None, work: str = "", fetch: Optional[Callable] = None,
            ask: Optional[Callable] = None, frame_vertical: Optional[Callable[[str], bool]] = None,
-           upload: Optional[Callable[[str, str], str]] = None, check: Optional[Callable[[str], str]] = None) -> dict:
+           upload: Optional[Callable[[str, str], str]] = None, check: Optional[Callable[[str], str]] = None,
+           listen: Optional[Callable[[str], Sequence]] = None,
+           renarrate: Optional[Callable[[List[dict]], str]] = None) -> dict:
     """
     The storm desk pass over a planned document (handler.do_plan, before publishing). Returns the report
     (doc.meta.stormDesk). Network only through `fetch` (the pause clips) and `ask` (the headline model);
@@ -2352,9 +2751,23 @@ def finish(doc: dict, inp: dict, brief: Optional[dict] = None, work: str = "", f
     pauses = out_pauses(inp.get("_storm_pauses") or [])
     # Who uploaded each shot, before anything is picked from them (the pauses take their clips from these sources).
     rep["channelsResolvedFirst"] = step("channels", lambda: resolve_channels(doc)) or 0
-    rep["pauses"] = step("pauses", lambda: make_pauses(doc, pauses, work, fetch, frame_vertical, check)) or []
-    rep["cleanCheck"] = step("clean check", lambda: clean_check(doc)) or []
+    from . import stormledger, stormpieces
+    global JOB_LEDGER
+    engine = stormpieces.engine_of(None, inp)
+    JOB_LEDGER = step("ledger", lambda: stormledger.load(inp)) or stormledger.Ledger([])
+    rep["ledgerMoments"] = len(JOB_LEDGER.moments)
+    rep["pauses"] = step("pauses", lambda: make_pauses(doc, pauses, work, fetch, frame_vertical, check, listen=listen)) or []
+    rep["pauseFits"] = step("pause lengths", lambda: apply_fits(doc, pauses, inp, renarrate)) or 0
+    rep["cleanCheck"] = step("clean check", lambda: clean_check(doc, virtual=engine == "pieces")) or []
+    rep["channelRule"] = step("channel rule", lambda: mark_channels(doc, JOB_LEDGER)) or []
     st = step("stills", lambda: replace_stills(doc, check=check)) or {}
+    again = step("channel rule 2", lambda: mark_channels(doc, JOB_LEDGER)) or []
+    if again:                                   # a spare from a creator over the cap, or a moment of an earlier video
+        rep["channelRule"] += again
+        st2 = step("stills 2", lambda: replace_stills(doc, check=check)) or {}
+        for k in ("replaced", "moved", "held"):
+            st[k] = int(st.get(k) or 0) + int(st2.get(k) or 0)
+        st["left"] = st2.get("left", st.get("left"))
     for s in doc["scenes"]:
         s.pop("_reject", None)
         s.pop("_soft", None)
@@ -2421,6 +2834,7 @@ def finish(doc: dict, inp: dict, brief: Optional[dict] = None, work: str = "", f
     except Exception:  # noqa: BLE001
         clip_ok = False
     baked: Dict[str, bool] = {}
+    marks_by_path: Dict[str, List[List[float]]] = {}
 
     def look(i: int) -> None:
         s = doc["scenes"][i]
@@ -2468,6 +2882,12 @@ def finish(doc: dict, inp: dict, brief: Optional[dict] = None, work: str = "", f
                 return
             baked[path] = True
         boxes = static_marks(fr) if blur_on else []
+        if engine == "pieces":
+            if boxes:
+                with lock:
+                    marks_by_path[path] = boxes
+                    marked[0] += 1
+            return
         sm = _sm(s)
         flip = (mirror and not boxes and flips.get(video_id(s), False)
                 and str(sm.get("subjectType") or "").lower() not in _LANDMARK_TYPES)
@@ -2482,6 +2902,8 @@ def finish(doc: dict, inp: dict, brief: Optional[dict] = None, work: str = "", f
         with ThreadPoolExecutor(max(1, min(4, (os.cpu_count() or 2)))) as ex:
             list(ex.map(lambda i: step(f"look {i}", lambda: look(i)), range(len(doc["scenes"]))))
     rep["blurredClips"], rep["flippedClips"] = marked[0], flipped[0]
+    if engine == "pieces":
+        step("modes", lambda: set_modes(doc, marks_by_path))
     pairs = lookalikes(vectors) if vectors else []
     same = []
     for i, j, c in pairs:
@@ -2528,6 +2950,21 @@ def finish(doc: dict, inp: dict, brief: Optional[dict] = None, work: str = "", f
     rep["blocks"] = [{"start": b["start"], "headline": " / ".join(b.get("lines") or []), "tab": b.get("tab")}
                      for b in blocks]
     rep["music"] = step("music", lambda: music_level(doc))
+    rep["captions"] = step("captions", lambda: write_captions(doc, ask)) or 0
+    rep["creditsText"] = step("credits", lambda: credits_text(doc)) or ""
+    if engine == "pieces":
+        from . import stormlooks
+        doc["stormDesk"]["engine"] = "pieces"
+        tracks = [x for x in (opts.get("bgm_tracks") or []) if isinstance(x, dict) and x.get("url")]
+        if tracks:
+            doc["stormDesk"]["music"] = tracks[:6]
+        looks = step("looks", lambda: stormlooks.timeline(doc, blocks, pauses, brief, day, work, ask, opts=opts))
+        if looks:
+            doc["stormDesk"]["looks"] = looks
+            rep["looks"] = stormlooks.summary(looks)
+        rep["hookDissolve"] = step("hook tail", lambda: set_hook_tail(doc)) or False
+    rep["hookClips"] = sum(1 for s in doc["scenes"] if s.get("openClip"))
+    rep["reuseGate"] = step("reuse gate", lambda: reuse_gate(doc, JOB_LEDGER)) or {}
 
     # The checks, as the video stands.
     rep["repeats"] = repeats(doc)
@@ -2564,6 +3001,10 @@ def finish(doc: dict, inp: dict, brief: Optional[dict] = None, work: str = "", f
         issues.append(f"{rep['origin']['seconds']['reupload']:.0f} s from re-upload channels")
     if rep["emptyShots"]:
         issues.append(f"{rep['emptyShots']} empty shot(s)")
+    if (rep.get("reuseGate") or {}).get("earlier"):
+        issues.append(f"{len(rep['reuseGate']['earlier'])} shot(s) from a moment of an earlier video")
+    if (rep.get("reuseGate") or {}).get("same"):
+        issues.append(f"{len(rep['reuseGate']['same'])} pair(s) of shots with the same frames")
     missing = [p for p in rep["pauses"] if not p.get("clip")]
     if missing:
         issues.append(f"{len(missing)} pause(s) without their own clip")

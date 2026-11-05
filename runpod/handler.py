@@ -103,7 +103,7 @@ from src import topics
 from src import srcbank
 from src import spares
 from src import severe
-from src import stormdesk
+from src import stormdesk, stormledger, stormpieces, stormthumbs
 from src import machine
 from src import batch, sources
 from src import editing
@@ -196,9 +196,11 @@ class _LogTail:
         self.lock = threading.Lock()
         self.count = 0
         self._buf = ""
+        self.last_write = time.time()           # the pod's stall check (scripts/pod_job.py) reads it
 
     def write(self, s):
         self.stream.write(s)
+        self.last_write = time.time()
         with self.lock:
             self._buf += s
             while "\n" in self._buf:
@@ -1284,6 +1286,17 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     if day:
         print(f"[stormdesk] event day {day.isoformat()}: older uploads are turned down for event lines", flush=True)
     if stormdesk.is_style(inp):
+        # This customer's used moments (src/stormledger.py), so every search turns them down, not only the last check.
+        try:
+            led = stormledger.load(inp)
+            cur = ledger.current()
+            with cur.lock:
+                for v, ranges in led.by_src.items():
+                    cur.yt.setdefault(v, []).extend(ranges)
+            print(f"[stormdesk] ledger: {len(led.moments)} used moments", flush=True)
+        except Exception as e:  # noqa: BLE001 - the last check still reads it
+            print(f"[stormdesk] ledger not given to the search: {type(e).__name__}", flush=True)
+    if stormdesk.is_style(inp):
         padded = stormdesk.prepare_narration(
             inp, words, audio_path, audio_duration or (words[-1].end + 0.5), work,
             store=lambda local: _store_narration(local, "_stormdesk.mp3", inp))
@@ -1292,6 +1305,7 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
             audio_src = padded["url"] or audio_path
             inp["_storm_pauses"] = padded["pauses"]
             inp["_storm_narration"] = padded["url"]
+            inp["_storm_narration_path"], inp["_storm_original"] = padded["path"], padded.get("original") or ""
     # Cut where an editor would (src/transcribe.py human_cuts): the visual
     # track runs from frame 0 to the narration's end.
     segments = transcribe.segment_words(words, origin=0.0, until=audio_duration or None)
@@ -2038,10 +2052,27 @@ def _storm_desk(doc: dict, inp: dict, work: str, report: Reporter) -> None:
         folder = f"projects/{project_id}" if project_id else f"jobs/{inp.get('_job_id') or uuid.uuid4().hex}"
         return r2.upload(local, r2.tokened(f"{folder}/stormdesk/{name}"), content_type="image/jpeg",
                          deadline=time.time() + 120)
+
+    listen_lock = threading.Lock()
+
+    def listen(path: str):
+        with listen_lock:                       # one narration model in memory, one clip at a time
+            return transcribe.transcribe_words(path, language="en")
+
+    def renarrate(plan: list) -> str:
+        """The narration padded again for the pauses' real lengths; its new link, or "" (then nothing moves)."""
+        orig, path = inp.get("_storm_original") or "", inp.get("_storm_narration_path") or ""
+        if not orig or not path:
+            return ""
+        tmp = os.path.join(work, "narration.repad.mp3")
+        stormdesk.pad_narration(orig, plan, tmp)
+        os.replace(tmp, path)
+        return _store_narration(path, "_stormdesk.mp3", inp) or path
     try:
         brief = (doc.get("meta") or {}).get("story") or {}
         rep = stormdesk.finish(doc, inp, brief, work, ask=ask, upload=upload,
-                               frame_vertical=upscale.frame_vertical if config.ALLOW_VERTICAL else None)
+                               frame_vertical=upscale.frame_vertical if config.ALLOW_VERTICAL else None,
+                               listen=listen, renarrate=renarrate)
         # The padded narration (the pauses' silences): every render reads it, never the job's original upload.
         if inp.get("_storm_narration"):
             rep["narration"] = inp["_storm_narration"]
@@ -2056,6 +2087,17 @@ def _storm_desk(doc: dict, inp: dict, work: str, report: Reporter) -> None:
         doc.setdefault("meta", {})["stormDesk"] = {"error": f"{type(e).__name__}: {str(e)[:200]}"}
     timeline.drop_invalid_overlays(doc)
     timeline.validate(doc, require_media=False, allow_stock=inp.get("allow_stock"))
+    # A build goes straight on to the render: the shots start drawing now, during the remaining checks (the owner). A
+    # shot the checks then change has another name and is drawn again; the rest are waiting when the render starts.
+    if str(inp.get("action") or "build").lower() == "build" and stormpieces.engine_of(doc) == "pieces" \
+            and not stormpieces.supported(doc):
+        try:
+            _PRERENDER[project_id or inp.get("_job_id") or ""] = stormpieces.Prerender(doc, work, project_id)
+        except Exception as e:  # noqa: BLE001 - the render draws them
+            print(f"[pieces] not started early: {type(e).__name__}", flush=True)
+
+
+_PRERENDER: dict = {}
 
 
 def _replan_beat(scene: dict, doc: dict, story: dict, title: str) -> dict:
@@ -2922,6 +2964,7 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter,
             sd = {"error": f"{type(e).__name__}: {str(e)[:300]}"}
             print(f"[stormdesk] after the render: {sd['error']}", flush=True)
         doc["meta"].setdefault("stormDesk", {})["render"] = sd
+        _storm_desk_done(doc, inp, work, sd)
     # What goes back with the video: the gate's report and, when it ran, the review's.
     reports = {"quality": checked}
     if isinstance((doc.get("meta") or {}).get("stormDesk"), dict) and doc["meta"]["stormDesk"].get("render"):
@@ -3157,6 +3200,25 @@ def _draw(doc: dict, inp: dict, work: str, report, split: bool, out_path: str, g
     if gate is not None:
         gate.no_empty_scenes()          # a still that would not decode leaves no empty frame
 
+    # The Breaking News Desk's own engine (src/stormpieces.py): shots drawn once and joined without another encode.
+    # A document it cannot draw, or a failure of its own, goes through Remotion below.
+    if stormdesk.is_style(doc=doc) and stormpieces.engine_of(doc) == "pieces":
+        why = stormpieces.supported(doc)
+        if why:
+            print(f"[pieces] through Remotion: {why}", flush=True)
+            doc.setdefault("meta", {}).setdefault("stormDesk", {})["engineFallback"] = why
+        else:
+            scope = str(inp.get("render_cache_scope") or inp.get("project_id") or "")
+            early = _PRERENDER.pop(str(inp.get("project_id") or inp.get("_job_id") or ""), None)
+            try:
+                got = stormpieces.draw(doc, out_path, work, report, scope=scope, prerender=early)
+                doc.setdefault("meta", {}).setdefault("stormDesk", {})["pieces"] = got
+                print(f"[pieces] {json.dumps(got)}", flush=True)
+                return
+            except Exception as e:  # noqa: BLE001 - Remotion draws the video instead of a failed job
+                print(f"[pieces] through Remotion: {type(e).__name__}: {str(e)[:300]}", flush=True)
+                doc.setdefault("meta", {}).setdefault("stormDesk", {})["engineFallback"] = f"{type(e).__name__}: {str(e)[:200]}"
+
     report(f"Rendering {doc['meta'].get('sceneCount', len(doc['scenes']))} scenes", 70)
     events.phase("render")
     last_pct = [70]
@@ -3257,6 +3319,39 @@ def _draw(doc: dict, inp: dict, work: str, report, split: bool, out_path: str, g
         renderer.normalize_loudness(out_path)
 
 
+def _storm_desk_done(doc: dict, inp: dict, work: str, sd: dict) -> None:
+    """After a Breaking News Desk render: this video's moments into the customer's ledger, the gate's last word, and the 4K
+    thumbnails in both of the owner's looks. Never fails the video."""
+    try:
+        led = stormledger.load(inp)
+        gate = stormdesk.reuse_gate(doc, led)
+        sd["reuseGate"] = {"earlier": len(gate["earlier"]), "same": len(gate["same"])}
+        if gate["earlier"] or gate["same"]:
+            print(f"[stormdesk] reuse gate: {json.dumps(gate)[:600]}", flush=True)
+        led.add(stormledger.doc_moments(doc, stormdesk.moment))
+        sd["ledgerSaved"] = stormledger.save(inp, led)
+    except Exception as e:  # noqa: BLE001
+        sd["ledgerError"] = f"{type(e).__name__}: {str(e)[:160]}"
+    if stormpieces.engine_of(doc) != "pieces" or stormdesk.options(inp).get("thumbnails") is False:
+        return
+    try:
+        project_id = inp.get("project_id") or ""
+
+        def ask(system: str, payload: dict):
+            return director._chat_json(system, payload, timeout=60, routine=True) if director.is_configured() else None
+
+        def upload(local: str, name: str) -> str:
+            if not r2.enabled():
+                return ""
+            folder = f"projects/{project_id}" if project_id else f"jobs/{inp.get('_job_id') or uuid.uuid4().hex}"
+            return r2.upload(local, r2.tokened(f"{folder}/stormdesk/{name}"), content_type="image/jpeg",
+                             deadline=time.time() + 120)
+        logo, _text = stormpieces.prepare_logo(doc, work)
+        sd["thumbnails"] = stormthumbs.make(doc, inp, work, ask, upload, logo=logo)
+    except Exception as e:  # noqa: BLE001
+        sd["thumbnails"] = {"error": f"{type(e).__name__}: {str(e)[:160]}"}
+
+
 def _done_fields(out: dict) -> dict:
     return {
         "status": "done", "progress": 100, "current_step": "Done",
@@ -3270,7 +3365,7 @@ def _done_fields(out: dict) -> dict:
 # Settings a job may override for itself ({"config": {...}} in the input), so
 # the benchmark can A/B a selection change on one image. Coerced to the type
 # the setting already has; anything else is ignored.
-CONFIG_OVERRIDABLE = ("CANDIDATE_POOL", "ANIMATION_FILL", "GAMEPLAY_FOOTAGE", "JUDGE_BEST_OF", "EXCELLENT_SCORE", "JUDGE_MAX_PER_SCENE",
+CONFIG_OVERRIDABLE = ("STORM_DESK_ENGINE", "CANDIDATE_POOL", "ANIMATION_FILL", "GAMEPLAY_FOOTAGE", "JUDGE_BEST_OF", "EXCELLENT_SCORE", "JUDGE_MAX_PER_SCENE",
                       "POOL_EXTRA_QUERIES", "POOL_SCOUT", "INTENT_QUERIES_MAX",
                       "VISION_MAX_CANDIDATES", "META_WEIGHTS", "FINAL_WEIGHTS",
                       "TREATMENTS", "STYLE_PACK", "MOMENT_FINE_PASS", "CLEAN_CUTS",
