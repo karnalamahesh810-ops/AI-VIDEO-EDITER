@@ -302,12 +302,14 @@ def main() -> None:
     if stall > 0:
         import threading
 
+        stall_over = threading.Event()
+        globals()["_STALL_OVER"] = stall_over
+
         def _stall_watch():
-            while True:
-                time.sleep(60)
+            while not stall_over.wait(60):
                 tail = getattr(handler, "LOG_TAIL", None)
                 last = float(getattr(tail, "last_write", 0.0) or 0.0)
-                if last and time.time() - last > stall:
+                if last and time.monotonic() - last > stall:
                     print(f"[pod] nothing for {int(stall // 60)} min: the job is stuck", flush=True)
                     pid_ = ((globals().get("_JOB") or {}).get("input") or {}).get("project_id") or ""
                     fields_ = {"status": "failed", "current_step": "Failed",
@@ -359,6 +361,8 @@ def main() -> None:
     except Exception as e:  # noqa: BLE001
         traceback.print_exc()
         out = {"ok": False, "error": f"{type(e).__name__}: {e}"}
+    if globals().get("_STALL_OVER") is not None:
+        globals()["_STALL_OVER"].set()          # the job ended: writing its result may be quiet for a while
     # A spread render's worker chunks never outlive the pod's job.
     _cancel_chunks()
     if not isinstance(out, dict):

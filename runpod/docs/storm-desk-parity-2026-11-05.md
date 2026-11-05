@@ -142,3 +142,7 @@ No migration. No new database objects.
 7. **BGM.** Upload his tracks to R2 and paste the links into "More music" in the panel.
 8. **Check** with one short real video: `pod_*` job, hook count, `meta.stormDesk.render.pieces`, thumbnails in the editor.
 9. **Later:** an R2 lifecycle rule on `sdpieces/`, since kept shots use about 0.9 GB per 9-minute video.
+
+## Tests
+
+Worker, offline: 3,869 tests, 2 fail, and both fail the same way on the live commit 63e803e (`test_data_graphics` next chart, `test_style_match` outlined text). App: the Breaking News Desk test files pass, typecheck clean; the whole app suite was not run.

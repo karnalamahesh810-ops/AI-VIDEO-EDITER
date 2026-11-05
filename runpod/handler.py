@@ -196,11 +196,11 @@ class _LogTail:
         self.lock = threading.Lock()
         self.count = 0
         self._buf = ""
-        self.last_write = time.time()           # the pod's stall check (scripts/pod_job.py) reads it
+        self.last_write = time.monotonic()      # the pod's stall check (scripts/pod_job.py) reads it
 
     def write(self, s):
         self.stream.write(s)
-        self.last_write = time.time()
+        self.last_write = time.monotonic()
         with self.lock:
             self._buf += s
             while "\n" in self._buf:
