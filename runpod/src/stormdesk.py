@@ -74,6 +74,11 @@ NAT_LUFS = -20.0                # a pause clip's sound before the master (the la
 NAT_FADE = 0.2
 J_LEAD = 0.35                   # a pause's sound starts this much before its picture (a J cut)
 L_TAIL = 0.6                    # ... and fades out under the narration's first words after it (an L cut)
+BGM_LUFS = -39.0                # the owner's music, integrated, ~10-11% of the voice's level (kit bgm_lufs, 2026-11-06) ...
+BGM_ONLY_UNDER_VOICE = True     # ... and only while he speaks: none during a clip's own sound (kit bgm_only_under_voice)
+WATER_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sdkit", "ambience", "rushing_water.mp3")
+WATER_SILENT_DB = -60.0         # a first hook clip quieter than this has no sound of its own (kit tools/hookwater.py)
+WATER_LEVEL = 0.55
 NATURAL_PAUSES_MAX = 2          # plain natural-sound pauses a video: the owner cut 3 of them as empty (2026-11-05)
 TALKING_FACE_SHARE = 0.015      # a face at least this share of the frame, with speech on the clip: someone talking on camera
 HOOK_CLIPS = 3                  # the opening: this many clips (the laptop videos since lp9: HOOKS = [6.0, 7.76, 8.08]) ...
@@ -163,8 +168,9 @@ def options(inp: Optional[dict]) -> dict:
 
 
 def clip_sound_mode(opts: Optional[dict]) -> str:
-    """The job's clip sound under the narration: "ambient" (the default) or "off"."""
-    v = (opts or {}).get("clip_sound", "ambient")
+    """The job's clip sound under the narration: "off" (the default since 2026-11-06: clips play their own sound in the pauses
+    only, never under the voice) or "ambient" when a job asks for it."""
+    v = (opts or {}).get("clip_sound", "off")
     if v is False or str(v).strip().lower() in ("off", "none", "0", "false", "silent"):
         return "off"
     return "ambient"
@@ -2462,6 +2468,16 @@ def music_level(doc: dict) -> Optional[dict]:
     return {"level": level, "duck": music["duck"], "voiceLufs": voice, "trackLufs": track}
 
 
+def bgm_options(opts: Optional[dict]) -> dict:
+    """doc.stormDesk.bgm: {"lufs", "onlyUnderVoice"}. storm_desk.bgm_lufs is held between -50 and -20."""
+    opts = opts or {}
+    try:
+        lufs = max(-50.0, min(-20.0, float(opts.get("bgm_lufs"))))
+    except (TypeError, ValueError):
+        lufs = BGM_LUFS
+    return {"lufs": lufs, "onlyUnderVoice": opts.get("bgm_only_under_voice", BGM_ONLY_UNDER_VOICE) is not False}
+
+
 def music_plan(tracks: Any, total: float) -> List[dict]:
     """The owner's tracks in turn over the video (the kit's picks "music": inv1, sus1, crime, crossfaded): links or
     {"url", "at", "offset"}; a track with no time gets its even share of the video."""
@@ -3074,6 +3090,7 @@ def finish(doc: dict, inp: dict, brief: Optional[dict] = None, work: str = "", f
         from . import stormlooks
         doc["stormDesk"]["engine"] = "pieces"
         doc["stormDesk"]["statStyle"] = stormlooks.stat_options(opts)
+        doc["stormDesk"]["bgm"] = bgm_options(opts)
         doc["stormDesk"]["music"] = music_plan(opts.get("bgm_tracks"), int(doc.get("durationInFrames") or 0) / float(fps))
         looks = step("looks", lambda: stormlooks.timeline(doc, blocks, pauses, brief, day, work, ask, opts=opts))
         if looks:
@@ -3173,6 +3190,7 @@ def nat_track(doc: dict, total: float, offset: float, sr: int = 48000, resolve: 
     rows = []
     pauses = (doc.get("meta") or {}).get("stormDesk", {}).get("pauses") or []
     order = sorted(doc.get("scenes") or [], key=lambda x: int(x["startFrame"]))
+    water_at = 0.0
     for idx, s in enumerate(order):
         if not s.get("natSound"):
             continue
@@ -3188,7 +3206,9 @@ def nat_track(doc: dict, total: float, offset: float, sr: int = 48000, resolve: 
             continue
         # J / L cuts (the owner's editing rule): the clip's sound comes up a beat before the narration stops
         # (as far as the clip has sound before its picture) and runs on under the first words after the pause.
-        trim0 = float((s.get("media") or {}).get("trimStart") or 0.0) + (a - t0)
+        # audio_in: the clip keeps its voice while the picture is another stretch of the source (kit render3).
+        heard = (s.get("media") or {}).get("audioIn")
+        trim0 = float(heard if isinstance(heard, (int, float)) else (s.get("media") or {}).get("trimStart") or 0.0) + (a - t0)
         lead = min(J_LEAD, max(0.0, trim0)) if not s.get("openClip") else 0.0
         tail = L_TAIL
         nxt = order[idx + 1] if idx + 1 < len(order) else None
@@ -3196,10 +3216,17 @@ def nat_track(doc: dict, total: float, offset: float, sr: int = 48000, resolve: 
             lead, tail = 0.0, 0.0               # a talking clip starts and ends on its own words (the kit: no J/L for these)
         elif nxt is not None and nxt.get("natSound"):
             tail = 0.0                          # the next clip's own sound starts here
+        music = str(((s.get("media") or {}).get("clipAudio") or {}).get("kind") or "") == "music" and not s.get("talk")
+        if music:
+            lead, tail = 0.0, 0.0               # never a clip's music in a pause (the kit): real water plays instead
         a, b = a - lead, b + tail
         trim = trim0 - lead
         try:
-            x = _read_audio(src, trim, b - a, sr, f"loudnorm=I={NAT_LUFS}:TP=-3:LRA=11")
+            if music:
+                x = _read_audio(WATER_FILE, water_at, b - a, sr, f"loudnorm=I={NAT_LUFS}:TP=-3:LRA=11")
+                water_at = (water_at + (b - a)) % 10.0
+            else:
+                x = _read_audio(src, trim, b - a, sr, f"loudnorm=I={NAT_LUFS}:TP=-3:LRA=11")
         except Exception as e:  # noqa: BLE001 - this pause plays without its sound
             rows.append({"at": round(a, 2), "ok": False, "why": f"{type(e).__name__}"})
             continue
@@ -3219,8 +3246,51 @@ def nat_track(doc: dict, total: float, offset: float, sr: int = 48000, resolve: 
             g[-r_out:] = np.linspace(1, 0, r_out)
         track[o:o + m] += x[:m] * g[:, None]
         rows.append({"at": round(a, 2), "seconds": round(m / sr, 2), "ok": True, "lead": round(lead, 2),
-                     "tail": round(tail, 2)})
+                     "tail": round(tail, 2), **({"water": "its sound is music"} if music else {})})
     return track, rows
+
+
+def first_hook_window(doc: dict) -> Optional[Tuple[float, float]]:
+    """(start, end) seconds of the video's first hook clip, or the first opening pause no clip was found for."""
+    fps = int(doc.get("fps") or 30)
+    hooks = sorted((s for s in doc.get("scenes") or [] if s.get("openClip")), key=lambda x: int(x["startFrame"]))
+    if hooks:
+        a = int(hooks[0]["startFrame"]) / float(fps)
+        return a, a + int(hooks[0]["durationInFrames"]) / float(fps)
+    for p in ((doc.get("meta") or {}).get("stormDesk") or {}).get("pauses") or []:
+        if p.get("open") and float(p.get("t1") or 0.0) > float(p.get("t0") or 0.0):
+            return float(p["t0"]), float(p["t1"])
+    return None
+
+
+def hook_water(doc: dict, nat: Any, total: float, offset: float, sr: int = 48000, read: Optional[Callable] = None) -> Optional[dict]:
+    """A silent opening never reaches the viewer (kit tools/hookwater.py): real rushing water under the first hook clip when
+    it has no sound of its own, fading out into the next clip. Added to `nat` in place. Returns its report, or None."""
+    import numpy as np
+    win = first_hook_window(doc)
+    if not win:
+        return None
+    a, b = win[0] + offset, win[1] + offset
+    i0, i1 = int(a * sr), min(len(nat), int(b * sr))
+    if i1 - i0 < int(0.5 * sr):
+        return None
+    level = float(20 * np.log10(np.sqrt(np.mean(nat[i0:i1] ** 2)) + 1e-9))
+    if level > WATER_SILENT_DB:
+        return None
+    d = b - a
+    x = (read or (lambda p, at, secs: _read_audio(p, at, secs, sr)))(WATER_FILE, 0.0, d + 0.25)
+    if x is None or not len(x):
+        return {"added": False, "why": "no water file"}
+    m = min(len(x), len(nat) - i0)
+    g = np.full(m, float(WATER_LEVEL), np.float32)
+    r = min(m, int(0.08 * sr))
+    g[:r] *= np.linspace(0, 1, r)
+    # (kit: afade out from d - 0.25 over 0.5 s, the file itself ends at d + 0.25)
+    o0 = max(0, int((d - 0.25) * sr))
+    if o0 < m:
+        g[o0:m] *= np.linspace(1, 0, m - o0)
+    nat[i0:i0 + m] += x[:m] * g[:, None]
+    return {"added": True, "at": round(a, 2), "seconds": round(m / float(sr), 2), "levelDb": round(level, 1)}
 
 
 def word_spans(doc: dict) -> List[Tuple[float, float]]:
@@ -3420,6 +3490,12 @@ def after_render(doc: dict, out_path: str, work: str, resolve: Optional[Callable
     base = _read_audio(out_path, 0.0, total + 1.0, sr)
     nat, rows = nat_track(doc, total, intro / float(fps), sr, resolve)
     rep["pauseSound"] = rows
+    try:
+        water = hook_water(doc, nat, total, intro / float(fps), sr)
+        if water:
+            rep["hookWater"] = water
+    except Exception as e:  # noqa: BLE001 - the video ships as it is
+        rep["hookWater"] = {"added": False, "error": f"{type(e).__name__}: {str(e)[:120]}"}
     n = max(len(base), int(round(total * sr)))
     mix = np.zeros((n, 2), np.float32)
     mix[:len(base)] += base

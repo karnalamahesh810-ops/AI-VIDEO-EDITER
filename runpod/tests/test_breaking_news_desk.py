@@ -257,7 +257,7 @@ class FinishAudioTests(unittest.TestCase):
                   scene(1, 4, 8, "BBBBBBBBBBB", "Chan B", 50, words=[{"text": "Rain.", "start": 4.5, "end": 5}])]
             sc[0]["media"]["url"], sc[1]["media"]["url"] = nat, mus
             doc = doc_of(sc)
-            inp = {"video_style": "storm_desk", "storm_desk": {"open_clip": False, "pauses": 0,
+            inp = {"video_style": "storm_desk", "storm_desk": {"open_clip": False, "pauses": 0, "clip_sound": "ambient",
                                                                "lookalike": False, "blur_marks": False}}
             with mock.patch.object(clipaudio, "whisper_says_speech", return_value=None):
                 rep = stormdesk.finish(doc, inp, {}, d)
@@ -272,7 +272,8 @@ class FinishAudioTests(unittest.TestCase):
             shutil.rmtree(d, ignore_errors=True)
 
     def test_options(self):
-        self.assertEqual(stormdesk.clip_sound_mode({}), "ambient")
+        self.assertEqual(stormdesk.clip_sound_mode({}), "off")          # pauses only, since 2026-11-06
+        self.assertEqual(stormdesk.clip_sound_mode({"clip_sound": "ambient"}), "ambient")
         self.assertEqual(stormdesk.clip_sound_mode({"clip_sound": "off"}), "off")
         self.assertEqual(stormdesk.clip_sound_mode({"clip_sound": False}), "off")
         self.assertTrue(stormdesk.open_clip_on({}))

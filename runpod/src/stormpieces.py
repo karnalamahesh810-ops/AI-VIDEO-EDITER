@@ -36,6 +36,7 @@ VOICE_LUFS = -16.0
 MUSIC_UNDER_VOICE_DB = 15.0        # the owner's BGM (2026-11-05: soft but there), integrated, on the voice's -16
 MUSIC_DUCK = 0.8                   # ... and x0.8 while he speaks (render3)
 MUSIC_FADE_IN, MUSIC_FADE_OUT = 2.0, 4.0
+VOICE_BLOCK_GAP = 3.0              # silence this long ends a stretch of narration: the music follows the stretches, not each breath
 
 
 def engine_of(doc: Optional[dict] = None, inp: Optional[dict] = None) -> str:
@@ -831,22 +832,39 @@ def speech_mask(spans: List[Tuple[float, float]], n: int):
     return out
 
 
+def voice_blocks(spans: List[Tuple[float, float]], gap: float = VOICE_BLOCK_GAP) -> List[Tuple[float, float]]:
+    """The stretches of narration: words closer than `gap` seconds are one (a breath between sentences is not a pause, and
+    the music must not pump on it; a pause clip's window is at least 3.5 s)."""
+    out: List[List[float]] = []
+    for a, b in sorted(spans):
+        if out and a - out[-1][1] < gap:
+            out[-1][1] = max(out[-1][1], b)
+        else:
+            out.append([a, b])
+    return [(a, b) for a, b in out]
+
+
 def music_bed(doc: dict, total: float, work: str, spans: List[Tuple[float, float]], voice_lufs: float = VOICE_LUFS):
-    """The owner's music on the video's clock, MUSIC_UNDER_VOICE_DB under the voice and x0.8 while it speaks, 2 s in, 4 s out,
-    3 s crossfades between sections. None without music."""
+    """The owner's music on the video's clock. doc.stormDesk.bgm (since 2026-11-06): -39 LUFS and only under the voice (the kit's
+    bgm_lufs + bgm_only_under_voice), silent during a clip's own sound. A timeline from before: MUSIC_UNDER_VOICE_DB under the
+    voice, x0.8 while it speaks. 2 s in, 4 s out, 3 s crossfades between sections. None without music."""
     import numpy as np
     secs = music_sections(doc)
     if not secs:
         return None
     n = int(round(total * SR))
     bed = np.zeros((n, 2), np.float32)
-    target = voice_lufs - MUSIC_UNDER_VOICE_DB
+    bgm = (doc.get("stormDesk") or {}).get("bgm")
+    bgm = bgm if isinstance(bgm, dict) else {}
+    target = float(bgm["lufs"]) if isinstance(bgm.get("lufs"), (int, float)) else voice_lufs - MUSIC_UNDER_VOICE_DB
     for k, sc in enumerate(secs):
         a = sc["at"]
         b = secs[k + 1]["at"] + 1.5 if k + 1 < len(secs) else total
         a0 = max(0.0, a - (1.5 if k else 0.0))
         src = localise(sc["url"], work)
-        x = _decode(src, f"loudnorm=I={target}:TP=-14:LRA=11", b - a0 + 0.1, sc["offset"])
+        # (TP: ffmpeg's loudnorm takes -9 at the lowest; -14 made it refuse the whole bed. The stereo chain: ffmpeg 5.1.)
+        x = _decode(src, f"aformat=channel_layouts=stereo,loudnorm=I={target}:TP=-9:LRA=11,aformat=channel_layouts=stereo",
+                    b - a0 + 0.1, sc["offset"])
         # A track shorter than its section loops: never a bed that stops half way.
         need = int(round((b - a0) * SR))
         if 0 < len(x) < need:
@@ -861,6 +879,8 @@ def music_bed(doc: dict, total: float, work: str, spans: List[Tuple[float, float
         tail = min(fo, m)
         env[m - tail:] = np.minimum(env[m - tail:], np.linspace(1, 0, tail))
         bed[o:o + m] += x[:m] * env[:, None]
+    if bgm.get("onlyUnderVoice"):
+        return bed * np.clip(speech_mask(voice_blocks(spans), n), 0.0, 1.0)[:, None]
     duck = speech_mask(spans, n)
     return bed * (1.0 - (1.0 - MUSIC_DUCK) * duck)[:, None]
 
@@ -943,7 +963,11 @@ def base_sound(doc: dict, total: float, work: str, spans: List[Tuple[float, floa
     if bed is not None:
         mix += bed
         rep["musicSections"] = len(music_sections(doc))
-        rep["musicUnderVoiceDb"] = MUSIC_UNDER_VOICE_DB
+        bgm = (doc.get("stormDesk") or {}).get("bgm")
+        if isinstance(bgm, dict):
+            rep["bgm"] = bgm
+        else:
+            rep["musicUnderVoiceDb"] = MUSIC_UNDER_VOICE_DB
     cues = sfx_cues((doc.get("stormDesk") or {}).get("looks"))
     if cues:
         mix += sfx_track(cues, n)

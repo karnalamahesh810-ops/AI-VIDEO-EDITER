@@ -284,8 +284,9 @@ class LooksTests(unittest.TestCase):
         self.assertGreater(tl["stats"][0][0], 20.0)         # nothing over the hook
 
     def test_spoken_date_becomes_a_stamp(self):
-        tl = stormlooks.timeline(self.doc(), [{"start": 25.0, "tab": "HOOVER DAM"}], [{"t0": 0.0, "t1": 20.0, "open": True}], {},
-                                 today=datetime.date(2026, 11, 5))
+        blocks, pauses = [{"start": 25.0, "tab": "HOOVER DAM"}], [{"t0": 0.0, "t1": 20.0, "open": True}]
+        self.assertFalse(stormlooks.timeline(self.doc(), blocks, pauses, {}, today=datetime.date(2026, 11, 5))["stamps"])    # off by default
+        tl = stormlooks.timeline(self.doc(), blocks, pauses, {}, today=datetime.date(2026, 11, 5), opts={"stamps": True})
         self.assertTrue(tl["stamps"])
         self.assertEqual(tl["stamps"][0][2], "10-15-2026")
         self.assertEqual(tl["stamps"][0][3], "HOOVER DAM")
@@ -412,8 +413,8 @@ class SpecTests(unittest.TestCase):
         d["stormDesk"] = {"credits": False, "logo": {"text": "T"}}
         keys = stormpieces.scene_spec(d, 0, [])["layers"][0][1]
         self.assertFalse(any(k[0] == "chip" for k in keys))
-        keys = stormpieces.scene_spec(d, 1, [])["layers"][0][1]
-        self.assertIn(("chip", "ARCHIVE", False), keys)
+        keys = stormpieces.scene_spec(d, 1, [])["layers"][0][1]     # no ARCHIVE tag either (the owner 2026-11-06)
+        self.assertFalse(any(k[0] == "chip" for k in keys))
 
     def test_old_timelines_stay_on_remotion(self):
         self.assertEqual(stormpieces.engine_of({"stormDesk": {"lowerThirds": []}}), "remotion")
