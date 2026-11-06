@@ -107,6 +107,7 @@ class Source:
     cached: bool = False
     description: str = ""
     why: str = ""                # why it was dropped ("" = in the bank)
+    library: bool = False        # from the footage library on R2 (src/stormlib.py): fetched only when a shot of it is placed
 
 
 def _fresh_state() -> dict:
@@ -122,6 +123,11 @@ _LOCK = threading.Lock()
 def reset() -> None:
     global _STATE
     _STATE = _fresh_state()
+
+
+def block_sources(ids_: Sequence[str]) -> None:
+    """Sources this job never downloads or shows (the Breaking News Desk's banned list; the per-line search leaves them alone)."""
+    _STATE.setdefault("blocked_ids", set()).update(str(i) for i in ids_)
 
 
 def ids() -> set:
@@ -261,6 +267,8 @@ def gate(c: dict, story_places: set, topic: str = "") -> str:
     from another place, too short or too long, vertical when the style does not frame it."""
     from . import media, stormdesk
     title, chan = str(c.get("title") or ""), str(c.get("channel") or "")
+    if str(c.get("id") or "") in (_STATE.get("ids") or ()) or str(c.get("id") or "") in (_STATE.get("blocked_ids") or ()):
+        return "already held"           # (the footage library has it, or a banned source: never downloaded)
     aspect = float(c.get("aspect") or 0.0)
     if aspect and aspect < 1.0 and not getattr(config, "ALLOW_VERTICAL", False):
         return "vertical"
@@ -413,7 +421,7 @@ def download(src: Source, work: str) -> str:
         return ""
     timeout = int(min(480, 90 + 0.8 * max(30.0, src.duration or 120.0)))
     for attempt in range(2):
-        if ytdlp.stopped() or ytdlp.past_deadline() or _past():
+        if ytdlp.stopped() or ytdlp.past_deadline() or _past() or ytdlp.bot_stopped():
             return ""
         with ytdlp._net_slot(ytdlp.DOWNLOAD) as ok:
             if not ok:
@@ -441,6 +449,7 @@ def download(src: Source, work: str) -> str:
                 return ""
         got = os.path.exists(out) and os.path.getsize(out) > 10000
         if got:
+            ytdlp.note_bot_result(src.id, False)
             ytdlp._release_proxy(proxy, True, None, started)
             size = os.path.getsize(out)
             costs.record("proxy.bytes", size)
@@ -456,6 +465,8 @@ def download(src: Source, work: str) -> str:
         _cleanup_partial(folder, src.id)
         if ytdlp._video_unavailable(src.id):
             break
+        if ytdlp.note_bot_result(src.id, cls == FailureClass.BOT_CHECK):
+            break                       # a bot check: this source is skipped, no second try (the Breaking News Desk)
     return ""
 
 
@@ -1099,6 +1110,9 @@ def cut(p: Piece, a: float, b: float, job: dict) -> Optional[Any]:
     down: the piece is marked bad)."""
     from . import filters, media
     src = _STATE["sources"][p.src]
+    if src.library and not src.path:
+        from . import stormlib
+        src.path = stormlib.ensure_source(src.id, _STATE.get("work") or "")
     path = filters.trim_clip(src.path, a, b - a)
     if not path:
         p.bad = True
@@ -1168,7 +1182,7 @@ def build(jobs: Sequence[dict], work: str, *, require_cc: bool = False, report: 
     st = _STATE
     lines = line_jobs(jobs)
     st["lines"] = {j["index"]: j for j in lines}
-    st["total"] = sum(float(j.get("seconds") or 0.0) for j in jobs or [])
+    st["total"] = max(float(st.get("total") or 0.0), sum(float(j.get("seconds") or 0.0) for j in jobs or []))
     st["work"] = work
     st["deadline"] = time.time() + float(getattr(config, "SOURCE_BANK_SECONDS", 900))
     st["story"] = _story(lines)
@@ -1222,9 +1236,10 @@ def build(jobs: Sequence[dict], work: str, *, require_cc: bool = False, report: 
 
     with ThreadPoolExecutor(max(1, int(getattr(config, "SOURCE_BANK_PARALLEL", 4)))) as ex:
         srcs = list(ex.map(one, srcs))
+    prior = [s for s in st["sources"] if s.library]     # the library's sources keep their place: their shots are on the timeline
     for k, s in enumerate(srcs):
         for p in s.pieces:
-            p.src = k
+            p.src = k + len(prior)
         if s.why:
             st["rejects"][s.why] += 1
             if _REUPLOAD_WHY.search(s.why) and s.kind not in ("station", "original"):
@@ -1237,7 +1252,7 @@ def build(jobs: Sequence[dict], work: str, *, require_cc: bool = False, report: 
         else:
             st["ids"].add(s.id)
             st["stats"]["reviewCached"] += int(s.cached)
-    st["sources"] = srcs
+    st["sources"] = prior + srcs
     with _Timer("embed"):
         _embed([p for s in srcs if not s.why for p in s.pieces])
     return srcs
@@ -1247,7 +1262,7 @@ _REUPLOAD_WHY = re.compile(r"re-upload|compilation")
 
 
 def _approved() -> List[Piece]:
-    return [p for s in _STATE["sources"] if not s.why for p in s.pieces if p.ok and not p.bad]
+    return [p for s in _STATE["sources"] if not s.why and not s.library for p in s.pieces if p.ok and not p.bad]
 
 
 def fill(jobs: Sequence[dict], work: str, *, require_cc: bool = False, report: Optional[Callable] = None,

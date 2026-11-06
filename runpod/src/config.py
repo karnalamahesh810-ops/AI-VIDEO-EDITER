@@ -1903,6 +1903,12 @@ USER_AGENT = f"ThumbGenius/2.0 (video worker; contact: {CONTACT_EMAIL})"
 # photos are kept there instead of the app's storage and read straight from
 # the public URL. R2_LIBRARY_PREFIX puts every key under a folder ("library/"
 # when the library has to share R2_BUCKET).
+# The Breaking News Desk's footage library (src/stormlib.py, scripts/library_push.py): a PRIVATE bucket, no public domain.
+# Empty, or equal to a bucket with a public domain, turns it off.
+R2_SDLIB_BUCKET = os.getenv("R2_SDLIB_BUCKET", "").strip()
+STORM_LIBRARY = _flag("STORM_LIBRARY", True)
+STORM_STATION_SHOTS = int(os.getenv("STORM_STATION_SHOTS", "26"))      # one station channel a video (tools/channels.py)
+STORM_EMPTY_AI_MAX = int(os.getenv("STORM_EMPTY_AI_MAX", "12"))        # AI pictures the empty-shot ladder may make without a job's ai_fill
 R2_LIBRARY_BUCKET = os.getenv("R2_LIBRARY_BUCKET", "").strip()
 R2_LIBRARY_PUBLIC_BASE = os.getenv("R2_LIBRARY_PUBLIC_BASE", "").strip()
 R2_LIBRARY_PREFIX = os.getenv("R2_LIBRARY_PREFIX", "").strip()
