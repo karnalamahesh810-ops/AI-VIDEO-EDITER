@@ -1548,6 +1548,8 @@ def hold_or_animate(doc: dict, *, label: str = "", laddered: bool = False,
     scenes = doc.get("scenes") or []
     fps = max(1, int(doc.get("fps") or 30))
     out = {"graphic": 0, "held": 0, "card": 0, "hook": 0}
+    if CONTEXT.get("no_hold") or str((doc.get("stormDesk") or {}).get("engine") or "") == "pieces":
+        return out                      # the Breaking News Desk's own ladder decides (src/stormgate.py): a hold comes last, a card never
     capped = shotcap.enabled()
     rates = shotcap.hold_rates()
     # NO_TEXT_FILL: real footage first - a graphic only for a line's figure, after every fresh shot.

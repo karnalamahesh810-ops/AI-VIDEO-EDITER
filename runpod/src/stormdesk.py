@@ -79,6 +79,7 @@ BGM_ONLY_UNDER_VOICE = True     # ... and only while he speaks: none during a cl
 WATER_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sdkit", "ambience", "rushing_water.mp3")
 WATER_SILENT_DB = -60.0         # a first hook clip quieter than this has no sound of its own (kit tools/hookwater.py)
 WATER_LEVEL = 0.55
+STATION_SKIP_HEAD = 3.0         # a station's source opens on a promo: nothing from its first seconds (a QR code and a CBS eye got through)
 NATURAL_PAUSES_MAX = 2          # plain natural-sound pauses a video: the owner cut 3 of them as empty (2026-11-05)
 TALKING_FACE_SHARE = 0.015      # a face at least this share of the frame, with speech on the clip: someone talking on camera
 HOOK_CLIPS = 3                  # the opening: this many clips (the laptop videos since lp9: HOOKS = [6.0, 7.76, 8.08]) ...
@@ -153,6 +154,8 @@ _LANDMARK_TYPES = {"landmark", "building", "monument", "place", "map", "document
 
 
 JOB_LEDGER = None                # this job's used moments (stormledger.Ledger), set by finish()
+JOB_PLACE = None                 # this job's wrong-place pattern (place_regex), set by finish()
+JOB_STRICT = False               # the pieces engine's rules are on for this job, set by finish()
 
 
 def is_style(inp: Optional[dict] = None, doc: Optional[dict] = None) -> bool:
@@ -1392,7 +1395,19 @@ def _default_fetch(video: str, start: float, seconds: float, work: str) -> str:
         local = ""
     if local:
         return local
+    # A source of the footage library (src/stormlib.py): its file from the private bucket, no YouTube.
+    try:
+        from . import stormlib
+        if stormlib.ensure_source(vid, work):
+            local = srcbank.local_section(vid, start, seconds, work, audio=True)
+    except Exception:  # noqa: BLE001 - the download below
+        local = ""
+    if local:
+        return local
     for _ in range(3):
+        if ytdlp.bot_stopped():
+            return ""
+        before = ytdlp.bot_report()["botChecks"]
         try:
             path = ytdlp._yt_fetch(vid, work, start, seconds, audio=True)
         except Exception as e:  # noqa: BLE001 - the next try
@@ -1400,6 +1415,8 @@ def _default_fetch(video: str, start: float, seconds: float, work: str) -> str:
             path = ""
         if path and os.path.isfile(path):
             return path
+        if ytdlp.bot_fast() and ytdlp.bot_report()["botChecks"] > before:
+            return ""                   # a bot check: this source is skipped, no second try
     return ""
 
 
@@ -1649,6 +1666,8 @@ def make_pauses(doc: dict, pauses: List[dict], work: str, fetch: Optional[Callab
             seen.add(mo[0])
             if not pause_source_ok(_sm(c).get("channel") or ""):
                 continue                        # never a re-uploader's, an unknown uploader's or a person's own channel's
+            if not place_ok(source_title(c), JOB_PLACE):
+                continue                        # the wrong-place guard: a pause too
             key = source_key(c)
             if key and key in (prev_key, next_key):
                 continue                        # never two shots in a row from one source
@@ -1656,6 +1675,11 @@ def make_pauses(doc: dict, pauses: List[dict], work: str, fetch: Optional[Callab
             start = pause_start(used.get(mo[0], []), want, video_seconds(mo[0]), gap)
             if start is None:
                 continue
+            if JOB_STRICT and is_station(_sm(c).get("channel") or "") and start < STATION_SKIP_HEAD:
+                # A station's source opens on a promo. (Clear of what the video shows there, or this source gives no pause.)
+                if any(not (STATION_SKIP_HEAD + want <= a - 0.3 or STATION_SKIP_HEAD >= b + 0.3) for a, b in used.get(mo[0], [])):
+                    continue
+                start = STATION_SKIP_HEAD
             tries.append((c, mo[0], start))
             if len(tries) >= (PAUSE_TRIES + 1 if is_open else PAUSE_TRIES):
                 break
@@ -2070,6 +2094,46 @@ def _yt_meta(vid: str) -> dict:
         return {}
 
 
+_PLACE_GENERIC = set("""lake river creek canyon dam mount mountain valley county city town state national park reservoir basin bay
+beach falls island north south east west new upper lower fort saint san santa los las the of""".split())
+
+
+def place_regex(inp: Optional[dict], brief: Optional[dict] = None) -> Optional[Any]:
+    """The wrong-place guard's pattern: storm_desk.place_regex, else the story's places (their first part, and a many-word
+    name's own word: "Lake Mead, NV" also matches "Mead"). None when the story names no place: nothing to guard."""
+    raw = str(options(inp).get("place_regex") or "").strip()
+    if raw:
+        try:
+            return re.compile(raw, re.I)
+        except re.error:
+            print("[stormdesk] place_regex is not a valid pattern: the story's places are used", flush=True)
+    names: List[str] = []
+    for p in (brief or {}).get("places") or []:
+        name = str(p or "").split(",")[0].strip().lower()
+        if len(name) < 3:
+            continue
+        names.append(re.escape(name))
+        own = [w for w in re.findall(r"[a-z0-9']+", name) if w not in _PLACE_GENERIC and len(w) >= 4]
+        names += [re.escape(w) for w in own if len(own) < len(name.split())]
+    if not names:
+        return None
+    return re.compile(r"\b(?:" + "|".join(sorted(set(names), key=len, reverse=True)) + r")\b", re.I)
+
+
+def place_ok(title: str, rx: Optional[Any]) -> bool:
+    """The source's title is about the story's place. A title not known yet is not refused (it is read before any use)."""
+    return rx is None or not str(title or "").strip() or bool(rx.search(str(title)))
+
+
+def station_shots(opts: Optional[dict]) -> int:
+    """One station channel's shots a video (storm_desk.station_shots, else STORM_STATION_SHOTS)."""
+    from . import config
+    try:
+        return max(1, int((opts or {}).get("station_shots") or getattr(config, "STORM_STATION_SHOTS", 26)))
+    except (TypeError, ValueError):
+        return int(getattr(config, "STORM_STATION_SHOTS", 26))
+
+
 def resolve_channels(doc: dict, info: Optional[Callable[[str], dict]] = None) -> int:
     """Every YouTube shot whose uploader is not known yet ("VIDEO: YouTube" on screen) gets it from the video's
     metadata, with its upload day. Returns how many were resolved."""
@@ -2196,12 +2260,15 @@ def _hold_next(doc: dict, i: int) -> bool:
 def replace_stills(doc: dict, pool: Optional[Callable[[dict], List[dict]]] = None,
                    take: Optional[Callable[[dict], bool]] = None,
                    check: Optional[Callable[[str], str]] = None,
-                   info: Optional[Callable[[str], dict]] = None) -> dict:
+                   info: Optional[Callable[[str], dict]] = None, spare: bool = True, reuse: bool = True,
+                   hold: bool = True, only_empty: bool = False, near: bool = False) -> dict:
     """
     Real clips for the shots stills_to_replace names, from the job's spare bank (src/spares.py: footage this job
     already downloaded and the judge passed, not shown anywhere): the best word match whose source is not the
     shot before's or after's, whose moment no other shot shows, and long enough. A picture left in the opening
     trades places with a real clip later on. Returns {"replaced", "moved", "left": [(index, why)]}.
+    spare / reuse / hold: which rungs run (stormgate.ensure_media walks them one at a time); only_empty: only shots with
+    nothing to show; near: another moment even from the source beside the shot.
     """
     fps = int(doc.get("fps") or 30)
     sc = doc["scenes"]
@@ -2216,7 +2283,11 @@ def replace_stills(doc: dict, pool: Optional[Callable[[dict], List[dict]]] = Non
     resolved = resolve_channels(doc, info)
     info = info or _yt_meta
     done, moved, left = 0, 0, []
-    for i, why in stills_to_replace(doc):
+    wanted = [(i, w) for i, w in stills_to_replace(doc) if not only_empty or w == "empty"]
+    for i, why in wanted:
+        if not spare:
+            left.append((i, why))
+            continue
         s = sc[i]
         secs = int(s["durationInFrames"]) / float(fps)
         sm = _sm(s)
@@ -2270,7 +2341,7 @@ def replace_stills(doc: dict, pool: Optional[Callable[[dict], List[dict]]] = Non
     # Nothing in the bank: another moment of an original clip the video already uses.
     left2 = []
     for i, why in left:
-        if why not in ("a picture in the opening", "soft / through glass") and _reuse_original(doc, i, used, gap):
+        if reuse and why not in ("a picture in the opening", "soft / through glass") and _reuse_original(doc, i, used, gap, allow_near=near):
             done += 1
         else:
             left2.append((i, why))
@@ -2297,15 +2368,15 @@ def replace_stills(doc: dict, pool: Optional[Callable[[dict], List[dict]]] = Non
     # still to come stay right). Pictures past the share stay (a real photo beats an empty frame).
     hard_why = ("empty", "a re-uploader's footage", "an unknown source", "text over the picture")
     held = 0
-    for _round in range(6):                     # a hold can make the next one possible (its neighbour fixed)
+    for _round in range(6 if hold else 0):      # a hold can make the next one possible (its neighbour fixed)
         changed = False
         for i, why in sorted(stills_to_replace(doc), key=lambda t: -t[0]):
-            if why not in hard_why:
+            if why not in hard_why or (only_empty and why != "empty"):
                 continue
             if _hold_previous(doc, i) or _hold_next(doc, i):
                 held += 1
                 changed = True
-            elif _reuse_original(doc, i, used, gap, allow_near=True):
+            elif reuse and _reuse_original(doc, i, used, gap, allow_near=True):
                 # Never a competitor's footage: another stretch of an original clip, even from the shot beside
                 # it (the owner: a repeat-safe reuse of originals beats a re-upload).
                 done += 1
@@ -2525,30 +2596,47 @@ def contact_sheet(doc: dict, thumbs: Dict[int, Any], out: str, cols: int = 8) ->
     return out
 
 
-def mark_channels(doc: dict, led: Any = None, earlier_channels: Optional[set] = None) -> List[dict]:
+def mark_channels(doc: dict, led: Any = None, earlier_channels: Optional[set] = None, place: Optional[Any] = None,
+                  station_cap: int = 0, strict: bool = False) -> List[dict]:
     """
     The owner's creator rule (tools/channels.py + tools/reusecheck.py) and the ledger, on the shots as they stand: a vlog or
     personality channel never; a person's own channel at most 2 shots a video, never in a pause or the hook; a moment of an
-    earlier video never. Marks scene["_reject"] so replace_stills swaps them. Returns one row per shot marked.
+    earlier video never; a source whose title is about another place never (`place`, place_regex); one station at most
+    `station_cap` shots; `strict` (the pieces engine): a banned source, a shot rejected in any video and a station's first 3 s
+    never either. Marks scene["_reject"] so replace_stills swaps them. Returns one row per shot marked.
     """
-    from . import stormledger
+    from . import stormledger, stormlib
     fps = int(doc.get("fps") or 30)
     rows: List[dict] = []
     per: Dict[str, int] = {}
+    per_station: Dict[str, int] = {}
+    banned = stormlib.bad_sources() if strict else set()
     shown: Dict[str, List[Tuple[float, float]]] = {}
     for i, s in enumerate(doc.get("scenes") or []):
         if (s.get("media") or {}).get("type") != "video" or is_ai(s) or not video_id(s).startswith("yt:"):
             continue
         ch = str(_sm(s).get("channel") or "")
         why = ""
-        if stormledger.is_personality(ch):
+        if video_id(s)[3:] in banned:
+            why = "a banned source"
+        elif stormledger.is_personality(ch):
             why = f"a personality channel ({ch[:40]})"
         elif source_kind(ch) == "creator":
             cap = stormledger.CREATOR_SHOTS_REPEAT if ch in (earlier_channels or ()) else stormledger.CREATOR_SHOTS
             per[ch] = per.get(ch, 0) + 1
             if per[ch] > cap:
                 why = f"creator {ch[:40]}: over {cap} shots"
+        elif station_cap and is_station(ch):
+            per_station[ch] = per_station.get(ch, 0) + 1
+            if per_station[ch] > station_cap and not s.get("natSound"):
+                why = f"station {ch[:40]}: over {station_cap} shots"
         mo = moment(s, fps)
+        if not why and not place_ok(source_title(s), place):
+            why = "its title is about another place"
+        if strict and not why and mo and is_station(ch) and mo[1] < STATION_SKIP_HEAD and not s.get("natSound"):
+            why = "a station's first seconds (a promo, a logo)"
+        if strict and not why and mo and not s.get("natSound") and stormlib.is_bad(mo[0], mo[1]):
+            why = "a shot rejected in an earlier video"
         if not why and led is not None and mo and led.used(mo[0], mo[1], mo[2]):
             why = "a moment an earlier video used"
         if mo:
@@ -2757,6 +2845,14 @@ def set_modes(doc: dict, marks_by_path: Dict[str, List[List[float]]]) -> None:
         have = str(sd.get("mode") or "")
         if want and (not have or _crop_k(want) < _crop_k(have)):
             sd["mode"] = want
+        from . import stormlib
+        vid = video_id(s)[3:] if video_id(s).startswith("yt:") else ""
+        tuned = stormlib.station_modes()
+        if vid in tuned:                        # tuned by eye on the laptop (credits/station_modes.json); null = the full frame
+            if tuned[vid]:
+                sd["mode"] = tuned[vid]
+            else:
+                sd.pop("mode", None)
         path = _local(s) or str((s.get("media") or {}).get("url") or "")
         boxes = marks_by_path.get(path) or []
         if boxes:
@@ -2875,19 +2971,37 @@ def finish(doc: dict, inp: dict, brief: Optional[dict] = None, work: str = "", f
     engine = stormpieces.engine_of(None, inp)
     JOB_LEDGER = step("ledger", lambda: stormledger.load(inp)) or stormledger.Ledger([])
     rep["ledgerMoments"] = len(JOB_LEDGER.moments)
+    # The laptop's rules on the pieces engine (2026-11-07): a timeline on Remotion stays as it was.
+    pieces_on = engine == "pieces"
+    from . import stormgate
+    global JOB_PLACE, JOB_STRICT
+    JOB_PLACE = place_regex(inp, brief) if pieces_on else None
+    JOB_STRICT = pieces_on
+    cap_station = station_shots(opts) if pieces_on else 0
+
+    def clear_marked() -> int:
+        """Shots a rule refused and no spare could replace: nothing to show until the ladder fills them (it may keep them)."""
+        n = 0
+        for s in doc["scenes"]:
+            if s.get("_reject") and not s.get("natSound"):
+                stormgate.clear_scene(s, str(s["_reject"]))
+                n += 1
+        return n
     rep["pauses"] = step("pauses", lambda: make_pauses(doc, pauses, work, fetch, frame_vertical, check, listen=listen)) or []
     rep["naturalPausesDropped"] = step("empty pauses", lambda: drop_plain_pauses(doc, rep["pauses"])) or 0
     rep["pauseFits"] = step("pause lengths", lambda: apply_fits(doc, pauses, inp, renarrate)) or 0
     rep["cleanCheck"] = step("clean check", lambda: clean_check(doc, virtual=engine == "pieces")) or []
-    rep["channelRule"] = step("channel rule", lambda: mark_channels(doc, JOB_LEDGER)) or []
-    st = step("stills", lambda: replace_stills(doc, check=check)) or {}
-    again = step("channel rule 2", lambda: mark_channels(doc, JOB_LEDGER)) or []
+    rep["channelRule"] = step("channel rule", lambda: mark_channels(doc, JOB_LEDGER, place=JOB_PLACE, station_cap=cap_station, strict=pieces_on)) or []
+    st = step("stills", lambda: replace_stills(doc, check=check, hold=not pieces_on)) or {}
+    again = step("channel rule 2", lambda: mark_channels(doc, JOB_LEDGER, place=JOB_PLACE, station_cap=cap_station, strict=pieces_on)) or []
     if again:                                   # a spare from a creator over the cap, or a moment of an earlier video
         rep["channelRule"] += again
-        st2 = step("stills 2", lambda: replace_stills(doc, check=check)) or {}
+        st2 = step("stills 2", lambda: replace_stills(doc, check=check, hold=not pieces_on)) or {}
         for k in ("replaced", "moved", "held"):
             st[k] = int(st.get(k) or 0) + int(st2.get(k) or 0)
         st["left"] = st2.get("left", st.get("left"))
+    if pieces_on and step("clear", clear_marked):
+        rep["ladderRules"] = step("ladder", lambda: stormgate.ensure_media(doc, inp, work, allow_hold=False))
     for s in doc["scenes"]:
         s.pop("_reject", None)
         s.pop("_soft", None)
@@ -2911,26 +3025,29 @@ def finish(doc: dict, inp: dict, brief: Optional[dict] = None, work: str = "", f
             day = None
     day = day or event_date(text, opts)
     rep["eventDate"] = day.isoformat() if day else None
-    n_arch = 0
-    for s in doc["scenes"]:
-        m = s.get("media") or {}
-        if m.get("type") not in ("video", "image"):
-            s.pop("credit", None)
-            continue
-        if is_ai(s):
-            s["credit"] = {"text": "AI ILLUSTRATION", "ai": True}
-            continue
-        arch = archive(s, day, brief)
-        if not arch and is_photo(s):
-            # A picture whose title names an earlier year than the event's: an older storm's (the Las Vegas run's
-            # "Flood devastation in 1999").
-            yr = (brief or {}).get("year")
-            ref = day.year if day else (yr if isinstance(yr, int) and not isinstance(yr, bool) else None)
-            arch = bool(ref) and any(y < ref for y in photo_years(s))
-        n_arch += int(arch)
-        label = "VIDEO" if m.get("type") == "video" else "PHOTO"
-        s["credit"] = {"text": f"{label}: {credit_name(s)}", **({"archive": True} if arch else {})}
-    rep["archiveShots"] = n_arch
+
+    def credits_pass() -> int:
+        n_arch = 0
+        for s in doc["scenes"]:
+            m = s.get("media") or {}
+            if m.get("type") not in ("video", "image"):
+                s.pop("credit", None)
+                continue
+            if is_ai(s):
+                s["credit"] = {"text": "AI ILLUSTRATION", "ai": True}
+                continue
+            arch = archive(s, day, brief)
+            if not arch and is_photo(s):
+                # A picture whose title names an earlier year than the event's: an older storm's (the Las Vegas run's
+                # "Flood devastation in 1999").
+                yr = (brief or {}).get("year")
+                ref = day.year if day else (yr if isinstance(yr, int) and not isinstance(yr, bool) else None)
+                arch = bool(ref) and any(y < ref for y in photo_years(s))
+            n_arch += int(arch)
+            label = "VIDEO" if m.get("type") == "video" else "PHOTO"
+            s["credit"] = {"text": f"{label}: {credit_name(s)}", **({"archive": True} if arch else {})}
+        return n_arch
+    rep["archiveShots"] = credits_pass()
 
     fixed = step("neighbours", lambda: fix_neighbours(doc)) or (0, 0)
     rep["neighboursFixed"], rep["sameSourceInARow"] = fixed
@@ -3031,13 +3148,40 @@ def finish(doc: dict, inp: dict, brief: Optional[dict] = None, work: str = "", f
     if talking:
         for s in talking:
             s["_reject"] = "someone talking on camera under the narration"
-        step("talking shots", lambda: replace_stills(doc, check=check))
+        step("talking shots", lambda: replace_stills(doc, check=check, hold=not pieces_on))
+        if pieces_on and step("clear", clear_marked):
+            rep["ladderTalking"] = step("ladder", lambda: stormgate.ensure_media(doc, inp, work, allow_hold=False))
         for s in doc["scenes"]:
             s.pop("_reject", None)
             s.pop("_soft", None)
     rep["blurredClips"], rep["flippedClips"] = marked[0], flipped[0]
     if engine == "pieces":
         step("modes", lambda: set_modes(doc, marks_by_path))
+        # The hook's pictures (a QR code and a CBS eye got through on the laptop), then the shot gates' loop, the rules once
+        # more on whatever the loop placed, and last the ladder with its last rung: a shot held only when nothing else exists.
+        if opts.get("gates", True) is not False:
+
+            def refill() -> dict:
+                got = stormgate.ensure_media(doc, inp, work, allow_hold=False)
+                set_modes(doc, marks_by_path)
+                return got
+            rep["hookPictures"] = step("hook pictures", lambda: stormgate.hook_pictures(doc)) or []
+            rep["shotGates"] = step("shot gates", lambda: stormgate.autofix(doc, inp, work, fill=refill)) or {}
+            again = step("channel rule 3", lambda: mark_channels(doc, JOB_LEDGER, place=JOB_PLACE, station_cap=cap_station, strict=pieces_on)) or []
+            if again:
+                rep["channelRule"] += again
+                step("clear", clear_marked)
+                rep["ladderRules2"] = step("ladder", refill)
+                stormgate.restore_flagged(doc)
+                for s in doc["scenes"]:
+                    s.pop("_reject", None)
+        rep["emptyLadder"] = step("empty shots", lambda: stormgate.ensure_media(doc, inp, work)) or {}
+        step("modes", lambda: set_modes(doc, marks_by_path))
+        rep["archiveShots"] = step("credits", credits_pass) or 0
+        moved2 = step("ai opening", lambda: keep_ai_out_of_opening(doc)) or (0, 0)
+        rep["aiMovedOutOfOpening"], rep["aiInOpening"] = rep.get("aiMovedOutOfOpening", 0) + moved2[0], moved2[1]
+        fixed2 = step("neighbours", lambda: fix_neighbours(doc)) or (0, 0)
+        rep["neighboursFixed"], rep["sameSourceInARow"] = rep.get("neighboursFixed", 0) + fixed2[0], fixed2[1]
     pairs = lookalikes(vectors) if vectors else []
     same = []
     for i, j, c in pairs:
@@ -3105,6 +3249,14 @@ def finish(doc: dict, inp: dict, brief: Optional[dict] = None, work: str = "", f
     rep["sources"] = shares(doc)[:30]
     rep["origin"] = original_share(doc)
     rep["emptyShots"] = sum(1 for s in doc["scenes"] if is_empty(s) and not s.get("natSound"))
+    if pieces_on:
+        # (A text card counts as empty here: this engine has nothing else to draw on it.)
+        rep["emptyList"] = stormgate.empty_rows(doc)[:60]
+        rep["emptyShots"] = len(rep["emptyList"])
+        step("rejected moments", _flush_library)
+        rep["library"] = _library_report()
+        rep["youtube"] = _youtube_report()
+        rep["holdSaved"] = step("hold", lambda: stormledger.hold(inp, stormledger.doc_moments(doc, moment))) or False
     over = [r for r in rep["sources"] if r["share"] > SOURCE_CAP_SHARE + 0.005]
     rep["sourcesOverCap"] = over
     longest = max((int(s["durationInFrames"]) / fps for s in doc["scenes"]
@@ -3149,6 +3301,21 @@ def finish(doc: dict, inp: dict, brief: Optional[dict] = None, work: str = "", f
         if p.get("clip"):
             p["clip"] = os.path.basename(p["clip"])
     return rep
+
+
+def _flush_library() -> bool:
+    from . import stormlib
+    return stormlib.flush_bad()
+
+
+def _library_report() -> dict:
+    from . import stormlib
+    return stormlib.report()
+
+
+def _youtube_report() -> dict:
+    from . import ytdlp
+    return ytdlp.bot_report()
 
 
 def _tab_for(text: str, brief: Optional[dict]) -> str:

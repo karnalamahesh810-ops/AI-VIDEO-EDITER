@@ -42,6 +42,9 @@ WORKDIR /app
 # --- python deps -------------------------------------------------------------
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+# OCR for the Breaking News Desk's shot gates (src/stormgate.py). --no-deps: its opencv-python would sit over the worker's headless
+# opencv and need libGL. Its own small dependencies are named instead.
+RUN pip install --no-cache-dir --no-deps rapidocr-onnxruntime==1.4.4 pyclipper==1.4.0 shapely==2.2.0 six==1.17.0 PyYAML==6.0.3 tqdm==4.70.1
 
 # --- local models ------------------------------------------------------------
 # CLIP (local vision checks, src/localvision.py), Real-ESRGAN (photo

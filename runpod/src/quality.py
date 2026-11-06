@@ -1876,6 +1876,8 @@ class Gate:
         beside it can go on showing (NO_TEXT_FILL: gapfill.borrow_still; no scene is removed here, the
         render's chunks are cut from this document). Returns the ids of the text scenes."""
         out = []
+        if str((self.doc.get("stormDesk") or {}).get("engine") or "") == "pieces":
+            return out                  # never a text card on this engine: its own ladder or a failed video (src/stormgate.py)
         borrowed = getattr(self, "borrowed", None)
         if borrowed is None:
             borrowed = self.borrowed = set()

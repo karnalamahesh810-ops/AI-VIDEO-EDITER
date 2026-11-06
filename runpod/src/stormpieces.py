@@ -982,8 +982,9 @@ def base_sound(doc: dict, total: float, work: str, spans: List[Tuple[float, floa
 
 
 def draw(doc: dict, out_path: str, work: str, report: Optional[Callable[[str, int], None]] = None, scope: str = "",
-         prerender: Optional[Any] = None) -> dict:
-    """The whole video: shots, join, base sound -> out_path (stormdesk.after_render masters it). Returns the timings."""
+         prerender: Optional[Any] = None, inp: Optional[dict] = None, facescan: str = "") -> dict:
+    """The whole video: shots, join, base sound -> out_path (stormdesk.after_render masters it). Returns the timings.
+    facescan: "fix" = a person found on a drawn narrated shot has it replaced and drawn again, "report" = only said, "" = off."""
     from .stormdesk import word_spans
     t0 = time.time()
     if prerender is not None:
@@ -998,6 +999,18 @@ def draw(doc: dict, out_path: str, work: str, report: Optional[Callable[[str, in
             report(f"Rendering shots {done}/{total}" + (f" ({reused} unchanged)" if reused else ""), pct)
             print(f"[pieces] {done}/{total} shots ({int(time.time() - t0)} s)", flush=True)
     paths = render_pieces(doc, work, on, scope)
+    scanned: List[dict] = []
+    if facescan:
+        from . import stormgate
+        if report:
+            report("Checking the drawn shots for people on camera", 85)
+        for _r in range(stormgate.FACESCAN_ROUNDS if facescan == "fix" else 1):
+            hits = stormgate.facescan(doc, inp or {}, paths, work, change=facescan == "fix")
+            scanned += hits
+            if not hits or facescan != "fix":
+                break
+            stormgate.assert_no_empty(doc, "render")
+            paths = render_pieces(doc, work, on, scope)      # only the changed shots: a changed shot has another name
     t1 = time.time()
     if report:
         report("Joining the shots", 86)
@@ -1019,7 +1032,7 @@ def draw(doc: dict, out_path: str, work: str, report: Optional[Callable[[str, in
     t3 = time.time()
     rep.update({"engine": "pieces", "shots": len(paths), "shotsDrawn": LAST_RUN.get("drawn"), "shotsReused": LAST_RUN.get("reused"),
                 "shotsSeconds": round(t1 - t0, 1), "joinSeconds": round(t2 - t1, 1),
-                "soundSeconds": round(t3 - t2, 1)})
+                "soundSeconds": round(t3 - t2, 1), **({"faceScan": scanned[:60]} if facescan else {})})
     return rep
 
 

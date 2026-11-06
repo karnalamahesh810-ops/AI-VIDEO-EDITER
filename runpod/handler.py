@@ -103,7 +103,7 @@ from src import topics
 from src import srcbank
 from src import spares
 from src import severe
-from src import stormdesk, stormledger, stormpieces, stormthumbs
+from src import stormdesk, stormgate, stormledger, stormlib, stormpieces, stormthumbs
 from src import machine
 from src import batch, sources
 from src import editing
@@ -1289,6 +1289,7 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         # This customer's used moments (src/stormledger.py), so every search turns them down, not only the last check.
         try:
             led = stormledger.load(inp)
+            stormdesk.JOB_LEDGER = led
             cur = ledger.current()
             with cur.lock:
                 for v, ranges in led.by_src.items():
@@ -1550,6 +1551,9 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     # The lines and switches the fallback ladder and the check before
     # publishing need (src/gapfill.py).
     gapfill.remember(jobs, work, library=lib, require_cc=require_cc, youtube_only=flags["youtube_only"])
+    desk_pieces = stormdesk.is_style(inp) and stormpieces.engine_of(None, inp) == "pieces"
+    if desk_pieces:
+        gapfill.CONTEXT["no_hold"] = True       # its own ladder decides (src/stormgate.py): library first, a hold last
     # Parts on other workers apply the same per-job config overrides.
     fan_flags = ({**flags, "config": inp["config"]} if isinstance(inp.get("config"), dict) else flags)
     # ... and the same blocklist, event day and edit prompt (they are this job's, not the worker's settings).
@@ -1566,10 +1570,18 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     # original sources only, each downloaded whole once, scene-split and reviewed in one vision call, many
     # distinct shots cut from it by the narration. The lines it fills leave every search below.
     banked: dict = {}
+    if desk_pieces and not require_cc and open_jobs:
+        # The footage library on R2 first (src/stormlib.py): shots searched in seconds, only the sources placed fetched.
+        srcbank.block_sources(stormlib.bad_sources())
+        from_library = stormlib.fill(open_jobs, work, inp=inp, story=brief, led=stormdesk.JOB_LEDGER, report=report)
+        if from_library:
+            banked.update(from_library)
+            open_jobs = [j for j in open_jobs if j["index"] not in banked]
     if srcbank.enabled() and inp.get("allow_youtube") is not False and not require_cc and open_jobs:
         report("Finding and reviewing whole sources", 22, done=0, total=len(open_jobs))
-        banked = srcbank.fill(open_jobs, work, require_cc=require_cc, report=report,
-                              story_line=_bank_story_line(title, brief))
+        from_bank = srcbank.fill(open_jobs, work, require_cc=require_cc, report=report,
+                                 story_line=_bank_story_line(title, brief))
+        banked.update(from_bank)
         if banked:
             open_jobs = [j for j in open_jobs if j["index"] not in banked]
             if not fanned:
@@ -2085,6 +2097,9 @@ def _storm_desk(doc: dict, inp: dict, work: str, report: Reporter) -> None:
     except Exception as e:  # noqa: BLE001 - the plan as it is beats a failed job
         print(f"[stormdesk] pass skipped: {type(e).__name__}: {str(e)[:200]}", flush=True)
         doc.setdefault("meta", {})["stormDesk"] = {"error": f"{type(e).__name__}: {str(e)[:200]}"}
+    if stormpieces.engine_of(doc) == "pieces":
+        # No empty scenes, ever: the ladder has run (stormdesk.finish). A shot still with nothing to show fails the job, clearly.
+        stormgate.assert_no_empty(doc, "plan")
     timeline.drop_invalid_overlays(doc)
     timeline.validate(doc, require_media=False, allow_stock=inp.get("allow_stock"))
     # A build goes straight on to the render: the shots start drawing now, during the remaining checks (the owner). A
@@ -2903,6 +2918,8 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter,
     drawing = time.time()               # how long a draw takes here: the AI review's second render is timed by it
     try:
         _draw(doc, inp, work, report, split, out_path, gate)
+    except stormgate.EmptyShots:
+        raise
     except Exception as e:  # noqa: BLE001 - drawn once more when the error names files that can be replaced
         # (Too much of the media gone to repair: gate.recover raises that, in plain words.)
         if not gate.recover(e):
@@ -3207,6 +3224,12 @@ def _draw(doc: dict, inp: dict, work: str, report, split: bool, out_path: str, g
     # The Breaking News Desk's own engine (src/stormpieces.py): shots drawn once and joined without another encode.
     # A document it cannot draw, or a failure of its own, goes through Remotion below.
     if stormdesk.is_style(doc=doc) and stormpieces.engine_of(doc) == "pieces":
+        # Before a render too: count the shots with nothing to show (an edit, a file that would not decode), walk the ladder,
+        # and fail clearly rather than deliver.
+        ladder = stormgate.ensure_media(doc, inp, work)
+        if ladder.get("before"):
+            doc.setdefault("meta", {}).setdefault("stormDesk", {})["emptyAtRender"] = ladder
+        stormgate.assert_no_empty(doc, "render")
         why = stormpieces.supported(doc)
         if why:
             print(f"[pieces] through Remotion: {why}", flush=True)
@@ -3216,10 +3239,15 @@ def _draw(doc: dict, inp: dict, work: str, report, split: bool, out_path: str, g
             scope = str(inp.get("render_cache_scope") or inp.get("project_id") or "")
             early = _PRERENDER.pop(str(inp.get("project_id") or inp.get("_job_id") or ""), None)
             try:
-                got = stormpieces.draw(doc, out_path, work, report, scope=scope, prerender=early)
+                # A build's shots are this machine's to change; a render's were someone's choice in the editor: only reported.
+                scan = "fix" if str(inp.get("action") or "build").lower() == "build" else "report"
+                got = stormpieces.draw(doc, out_path, work, report, scope=scope, prerender=early, inp=inp,
+                                       facescan=scan if stormdesk.options(inp).get("gates", True) is not False else "")
                 doc.setdefault("meta", {}).setdefault("stormDesk", {})["pieces"] = got
                 print(f"[pieces] {json.dumps(got)}", flush=True)
                 return
+            except stormgate.EmptyShots:
+                raise
             except Exception as e:  # noqa: BLE001 - Remotion draws the video instead of a failed job
                 print(f"[pieces] through Remotion: {type(e).__name__}: {str(e)[:300]}", flush=True)
                 doc.setdefault("meta", {}).setdefault("stormDesk", {})["engineFallback"] = f"{type(e).__name__}: {str(e)[:200]}"
@@ -3370,7 +3398,7 @@ def _done_fields(out: dict) -> dict:
 # Settings a job may override for itself ({"config": {...}} in the input), so
 # the benchmark can A/B a selection change on one image. Coerced to the type
 # the setting already has; anything else is ignored.
-CONFIG_OVERRIDABLE = ("STORM_DESK_ENGINE", "CANDIDATE_POOL", "ANIMATION_FILL", "GAMEPLAY_FOOTAGE", "JUDGE_BEST_OF", "EXCELLENT_SCORE", "JUDGE_MAX_PER_SCENE",
+CONFIG_OVERRIDABLE = ("STORM_DESK_ENGINE", "STORM_LIBRARY", "STORM_STATION_SHOTS", "CANDIDATE_POOL", "ANIMATION_FILL", "GAMEPLAY_FOOTAGE", "JUDGE_BEST_OF", "EXCELLENT_SCORE", "JUDGE_MAX_PER_SCENE",
                       "POOL_EXTRA_QUERIES", "POOL_SCOUT", "INTENT_QUERIES_MAX",
                       "VISION_MAX_CANDIDATES", "META_WEIGHTS", "FINAL_WEIGHTS",
                       "TREATMENTS", "STYLE_PACK", "MOMENT_FINE_PASS", "CLEAN_CUTS",
@@ -3867,6 +3895,10 @@ def handler(job):
     spares.reset()                      # and the footage this job downloaded and kept for its empty lines
     pools.reset()                       # and the spare pool moments it may draw on
     srcbank.reset()                     # and the sources the source bank reviewed
+    stormlib.reset()                    # and the moments its gates refused
+    # The Breaking News Desk takes a bot check as final: no retry, the source is skipped (ytdlp.note_bot_result).
+    from src import ytdlp as _ytdlp_job
+    _ytdlp_job.set_bot_fast(stormdesk.is_style(inp) and action in ("plan", "build", "resource", "source_part"))
     shotcap.reset()                     # and what the shot cap cut and swapped
     hookcheck.reset()                   # and the hook check's vision calls
     packs.reset()                       # and the niches its footage packs are read for
@@ -4475,6 +4507,7 @@ def handler(job):
                     "status": "failed", "error_message": msg, "current_step": "Failed",
                 })
         return {"ok": False, "error": msg, "elapsed": round(time.time() - started, 1),
+                **({"error_code": e.code, "empty_shots": e.shots[:60], "stage": e.stage} if isinstance(e, stormgate.EmptyShots) else {}),
                 **(scene_failed["result"] if scene_failed else {}),
                 # What the failed job cost all the same (machine time, AI calls already made).
                 "costs": costs.summary(time.time() - started),
