@@ -344,6 +344,50 @@ def proxy_snapshot() -> List[dict]:
     return PROXY_MANAGER.snapshot()
 
 
+# A job that takes a bot check as final (the Breaking News Desk, set_bot_fast): no second try and no other route, the source is
+# skipped, and after BOT_STREAK_STOP in a row no new download starts in this job. On 2026-11-05 a pod spent 1,612 of 1,689 s on
+# 455 failed downloads. Other styles keep their retries.
+_BOT: dict = {"fast": False, "streak": 0, "checks": 0, "skipped": [], "stopped": False}
+BOT_STREAK_STOP = 3
+
+
+def set_bot_fast(on: bool) -> None:
+    with _FAIL_LOCK:
+        _BOT.update(fast=bool(on), streak=0, checks=0, skipped=[], stopped=False)
+
+
+def bot_fast() -> bool:
+    return bool(_BOT["fast"])
+
+
+def bot_stopped() -> bool:
+    """No new download in this job: YouTube has refused this machine BOT_STREAK_STOP times in a row."""
+    return bool(_BOT["fast"] and _BOT["stopped"])
+
+
+def note_bot_result(video_id: str, refused: bool) -> bool:
+    """A download's outcome for the fail-fast rule. True when this source must be given up now."""
+    if not _BOT["fast"]:
+        return False
+    with _FAIL_LOCK:
+        if not refused:
+            _BOT["streak"] = 0
+            return False
+        _BOT["checks"] += 1
+        _BOT["streak"] += 1
+        if video_id and video_id not in _BOT["skipped"] and len(_BOT["skipped"]) < 200:
+            _BOT["skipped"].append(video_id)
+        if _BOT["streak"] >= BOT_STREAK_STOP and not _BOT["stopped"]:
+            _BOT["stopped"] = True
+            print(f"[media] {_BOT['streak']} bot checks in a row: no new YouTube download in this job", flush=True)
+    return True
+
+
+def bot_report() -> dict:
+    with _FAIL_LOCK:
+        return {"botChecks": _BOT["checks"], "skipped": len(_BOT["skipped"]), "stopped": _BOT["stopped"]}
+
+
 def _note_failure(video_id: str, cls: FailureClass, proxy: str, why: str = "") -> FailureClass:
     """
     Record a failed download; returns the class to act on. YouTube's own "never"
@@ -579,7 +623,7 @@ def _yt_candidates(target: str, require_cc: bool, limit: int = 20,
             "--playlist-items", f"1-{limit}",
             "--print", "%(id)s\t%(duration)s\t%(url)s\t%(channel)s\t%(live_status)s\t%(availability)s\t%(title)s",
         ]
-    if stopped():
+    if stopped() or bot_stopped():      # (no download can start in this job: a result would lead nowhere)
         return []
     with _net_slot(SEARCH) as ok:
         if not ok:
@@ -660,7 +704,7 @@ def _yt_info(video_id: str, timeout: int = 60) -> tuple:
     """
     with _INFO_LOCK:
         cached = _YT_INFO_CACHE.get(video_id)
-    if cached is None and stopped():
+    if cached is None and (stopped() or bot_stopped()):
         return {}, None
     if cached is not None:
         return cached
@@ -695,6 +739,7 @@ def _yt_info(video_id: str, timeout: int = 60) -> tuple:
         why = ytdlp_reason(p.stderr)
         first = classify_ytdlp(p.stderr, p.returncode)
         cls = _note_failure(video_id, first, proxy, why)
+        note_bot_result(video_id, first == FailureClass.BOT_CHECK)
         _release_proxy(proxy, False, cls, started)
         print(f"[media] metadata failed ({video_id}, {cls.value}) via proxy #{_proxy_index(proxy)}: "
               f"{why or 'no diagnostic'}", flush=True)
@@ -1029,7 +1074,7 @@ def _yt_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
     if _video_unavailable(video_id):
         _LAST_FAILURE.set((FailureClass.MEDIA_UNAVAILABLE, ""))
         return ""
-    if stopped():
+    if stopped() or bot_stopped():
         # Not the video's fault: nothing is recorded, and no retry follows.
         _LAST_FAILURE.set((FailureClass.MEDIA_UNAVAILABLE, ""))
         return ""
@@ -1078,6 +1123,7 @@ def _yt_fetch(video_id: str, out_dir: str, start_at: float, seconds: float,
             return _yt_fetch(video_id, out_dir, fitted, seconds, timeout, hls_fix, refit=False, audio=audio, hero=hero)
         first = classify_ytdlp(p.stderr, p.returncode)
         cls = _note_failure(video_id, first, proxy, why)
+        note_bot_result(video_id, first == FailureClass.BOT_CHECK)
         _release_proxy(proxy, False, cls, started)
         print(f"[media] download failed ({video_id}, {cls.value}) via proxy #{_proxy_index(proxy)}: "
               f"{why or 'no diagnostic'}", flush=True)

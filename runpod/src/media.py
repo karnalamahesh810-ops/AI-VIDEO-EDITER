@@ -2904,6 +2904,9 @@ def _yt_fetch_retry(video_id: str, out_dir: str, start_at: float, seconds: float
         cls, _proxy = _LAST_FAILURE.get() or (FailureClass.UNKNOWN, "")
         if _proxy is not None:
             tried.add(_proxy)
+        if cls == FailureClass.BOT_CHECK and _ytdlp.bot_fast():
+            print(f"[media] skipped {title[:50] or video_id}: bot check, no retry", flush=True)
+            return ""
         if cls in (FailureClass.STREAM_REFUSED, FailureClass.BOT_CHECK):
             client = str(getattr(config, "YTDLP_RETRY_PLAYER_CLIENT", "") or "")
         policy = RETRY.get(cls, RETRY[FailureClass.UNKNOWN])
