@@ -131,17 +131,33 @@ def _back(x):
     return 1 + (c + 1) * (x - 1) ** 3 + c * (x - 1) ** 2
 
 
-def red_stat(fr, t, t0, t1, text, y=470, size=104):
+def red_stat(fr, t, t0, t1, text, y=470, size=104, color=RED):
     """Big red bold number with a soft glow. Lands on its word with a small settle, keeps drifting so it is never
     frozen, and leaves by lifting and fading (owner 2026-11-05: no static open or close)."""
     if not (t0 <= t < t1):
         return
-    lay = text_layer(text, font(F_AR, size, True), RED, glow=(255, 30, 30), glow_r=14, glow_k=0.9, shadow=0.55)
+    lay = text_layer(text, font(F_AR, size, True), color, glow=(255, 30, 30) if color == RED else color, glow_r=14, glow_k=0.9, shadow=0.55)
     k_in = _back((t - t0) / 0.32); k_out = ease(ramp(t, t1 - 0.28, t1))
     zoom = (0.86 + 0.14 * k_in) * (1 + 0.012 * (t - t0))
     im, pad = lay
     lay = (im.resize((max(1, int(im.width * zoom)), max(1, int(im.height * zoom))), Image.BILINEAR), pad)
     put(fr, lay, W // 2, y - int(26 * k_out), min(1.0, ramp(t, t0, t0 + 0.14)) * (1 - k_out))
+
+
+def corner_stat(fr, t, t0, t1, text, right=1880, y=118, size=46, plate_on=True, color=RED):
+    """Small stat at the top right (owner 2026-11-06). Slides in on its word, keeps drifting a little and slides back out.
+    plate_on: a dark plate behind it, readable over any footage."""
+    if not (t0 <= t < t1):
+        return
+    im, pad = text_layer(text, font(F_AR, size, True), color, glow=(255, 30, 30) if color == RED else color, glow_r=5, glow_k=0.4, shadow=0.6)
+    plate = Image.new("RGBA", im.size, (0, 0, 0, 0))
+    if plate_on:
+        ImageDraw.Draw(plate).rounded_rectangle((pad - 16, pad - 8, im.width - pad + 16, im.height - pad + 8), radius=7, fill=(0, 0, 0, 170))
+    plate.alpha_composite(im)
+    k_in = ease(ramp(t, t0, t0 + 0.28)); k_out = ease(ramp(t, t1 - 0.26, t1))
+    drift = 5 * (t - t0) / max(0.1, t1 - t0)
+    cx = right - plate.width // 2 + pad + int(46 * (1 - k_in)) + int(46 * k_out) - int(drift)
+    put(fr, (plate, pad), cx, y, k_in * (1 - k_out))
 
 
 def chapter_title(fr, t, t0, t_black, t1, title, sub):

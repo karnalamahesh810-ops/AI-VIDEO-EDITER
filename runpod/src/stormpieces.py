@@ -189,12 +189,8 @@ def scene_spec(doc: dict, i: int, ev: Optional[List[tuple]] = None, looks: Optio
     if s.get("blurSides") and desk.get("sideLogo") is not False:
         fixed.append(["side"])
     cr = s.get("credit") or {}
-    if cr.get("ai"):
+    if cr.get("ai"):                             # no source names and no ARCHIVE tag on screen (the owner 2026-11-06)
         fixed.append(["chip", "AI ILLUSTRATION", True])
-    elif cr.get("archive"):
-        fixed.append(["chip", "ARCHIVE", False])
-    elif desk.get("credits") is not False and cr.get("text"):
-        fixed.append(["chip", str(cr["text"]), False])
     if s.get("caption"):
         fixed.append(["cap", str(s["caption"])])
     if m.get("type") == "animation":
@@ -221,7 +217,7 @@ def scene_spec(doc: dict, i: int, ev: Optional[List[tuple]] = None, looks: Optio
     if m.get("type") == "video" and 0.05 < room < secs - 0.04:
         spec["rate"] = round(max(0.6, room / secs), 4)       # a held-over clip plays slower instead of running out
     if looks:
-        spec["looks"] = looks_for_shot(looks, f0, n, fps)
+        spec["looks"] = looks_for_shot(looks, f0, n, fps, desk.get("statStyle"))
     tail = s.get("hookTail")
     if isinstance(tail, dict) and tail.get("src"):
         spec["dissolve"] = {**tail, "n": min(HOOK_DISSOLVE_FRAMES, n), "srcKey": os.path.basename(str(tail["src"]).split("?")[0])}
@@ -243,8 +239,9 @@ def _src_key(s: dict) -> str:
     return str(sm.get("assetId") or sm.get("sourceUrl") or os.path.basename(str((s.get("media") or {}).get("url") or "").split("?")[0]))
 
 
-def looks_for_shot(tl: dict, f0: int, n: int, fps: int) -> List[list]:
+def looks_for_shot(tl: dict, f0: int, n: int, fps: int, stat_style: Optional[dict] = None) -> List[list]:
     """The looks (stormlooks.timeline) that touch this shot, in seconds from its first frame."""
+    from . import stormlooks
     t0, t1 = f0 / float(fps), (f0 + n) / float(fps)
     out: List[list] = []
 
@@ -255,7 +252,7 @@ def looks_for_shot(tl: dict, f0: int, n: int, fps: int) -> List[list]:
             out.append(["type", rel(a), rel(b), text])
     for a, b, text in tl.get("stats") or []:
         if a < t1 and b > t0:
-            out.append(["stat", rel(a), rel(b), text])
+            out.append(stormlooks.stat_row(rel(a), rel(b), text, stat_style))
     for a, b, text in tl.get("places") or []:
         if a < t1 and b > t0:
             out.append(["place", rel(a), rel(b), text])
@@ -420,7 +417,7 @@ def _draw_looks(fr, t: float, looks: List[list], cams: dict):
         if x[0] == "type":
             L.typewriter_date(fr, t, x[1], x[2], x[3])
         elif x[0] == "stat":
-            L.red_stat(fr, t, x[1], x[2], x[3])
+            _draw_stat(fr, t, x, L)
         elif x[0] == "place":
             L.place_tag(fr, t, x[1], x[2], x[3])
         elif x[0] == "stamp":
@@ -428,6 +425,18 @@ def _draw_looks(fr, t: float, looks: List[list], cams: dict):
         elif x[0] == "graph":
             L.mini_graph(fr, t, x[1], x[2], x[3], [tuple(r) for r in x[4]], base=x[5])
     return fr
+
+
+def _draw_stat(fr, t: float, x: list, L: Any) -> None:
+    """["stat", start, end, text, style, size px, colour]: corner by default; an older spec has only the first four."""
+    style = x[4] if len(x) > 4 else "corner"
+    size = int(x[5]) if len(x) > 5 else 46
+    c = str(x[6]) if len(x) > 6 else ""
+    color = tuple(int(c[i:i + 2], 16) for i in (1, 3, 5)) if len(c) == 7 else L.RED
+    if style == "center":
+        L.red_stat(fr, t, x[1], x[2], x[3], size=size, color=color)
+    else:
+        L.corner_stat(fr, t, x[1], x[2], x[3], size=size, plate_on=style == "corner_plate", color=color)
 
 
 def _dim(fr, k: float):

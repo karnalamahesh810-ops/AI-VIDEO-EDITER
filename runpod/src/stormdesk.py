@@ -3073,6 +3073,7 @@ def finish(doc: dict, inp: dict, brief: Optional[dict] = None, work: str = "", f
     if engine == "pieces":
         from . import stormlooks
         doc["stormDesk"]["engine"] = "pieces"
+        doc["stormDesk"]["statStyle"] = stormlooks.stat_options(opts)
         doc["stormDesk"]["music"] = music_plan(opts.get("bgm_tracks"), int(doc.get("durationInFrames") or 0) / float(fps))
         looks = step("looks", lambda: stormlooks.timeline(doc, blocks, pauses, brief, day, work, ask, opts=opts))
         if looks:

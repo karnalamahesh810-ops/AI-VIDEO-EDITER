@@ -36,6 +36,10 @@ MAP_MAX = 3
 TITLE_LEAD = 2.6            # a chapter title starts this long before its pause ...
 TITLE_BLACK = 0.7           # ... and the footage is black this long before it
 SAT_ZOOM = 13
+STAT_STYLES = ("corner", "corner_plate", "center")
+STAT_SIZES = {"corner": {"small": 46, "medium": 58, "large": 72}, "corner_plate": {"small": 46, "medium": 58, "large": 72},
+              "center": {"small": 72, "medium": 88, "large": 104}}
+STAT_DEFAULT_SIZE = {"corner": "small", "corner_plate": "small", "center": "large"}
 SAT_HALF = (1800, 1150)     # mosaic pixels each side of a pin: what L.map_pin shows at its widest (scale 0.62) and its lift
 
 _NUM = re.compile(r"^[~+\-$]?\d[\d,]*(?:\.\d+)?(?:%|st|nd|rd|th)?[.,;:!?)]*$", re.I)
@@ -51,6 +55,27 @@ UNITS = {
 }
 _MONTHS = ("january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november",
            "december")
+
+
+def stat_options(opts: Optional[dict]) -> dict:
+    """The stats' text style from a job or a timeline (storm_desk.stat_style / stat_color / stat_size, doc.stormDesk.statStyle):
+    {"style": corner | corner_plate | center, "size": small | medium | large, "color": "#RRGGBB" or ""}. Anything unknown
+    takes the default: small, no plate, top right, the kit's red (the owner 2026-11-06: never big in the middle)."""
+    opts = opts if isinstance(opts, dict) else {}
+    style = str(opts.get("stat_style") or opts.get("style") or "corner").strip().lower()
+    if style not in STAT_STYLES:
+        style = "corner"
+    size = str(opts.get("stat_size") or opts.get("size") or "").strip().lower()
+    if size not in STAT_SIZES[style]:
+        size = STAT_DEFAULT_SIZE[style]
+    color = str(opts.get("stat_color") or opts.get("color") or "").strip()
+    return {"style": style, "size": size, "color": color.upper() if re.fullmatch(r"#[0-9a-fA-F]{6}", color) else ""}
+
+
+def stat_row(a: float, b: float, text: str, st: Optional[dict] = None) -> list:
+    """One stat as the shot's spec carries it: ["stat", start, end, text, style, size in px, colour]."""
+    st = stat_options(st)
+    return ["stat", a, b, text, st["style"], STAT_SIZES[st["style"]][st["size"]], st["color"]]
 
 
 def _clean(w: str) -> str:
@@ -308,8 +333,8 @@ def timeline(doc: dict, blocks: Sequence[dict], pauses: Sequence[dict], brief: O
         at = find_phrase(words, short, hook_end)
         if at is not None and at + PLACE_SECONDS < total - 1.0 and track.take(at, at + PLACE_SECONDS):
             tl["places"].append([round(at, 3), round(at + PLACE_SECONDS, 3), str(name).upper()[:34]])
-    # A spoken date: the camcorder stamp, with its block's label.
-    for at, d in spoken_dates(words, today)[:STAMP_MAX * 3]:
+    # A spoken date: the camcorder stamp, with its block's label. Off unless the job asks (the owner 2026-11-06: no stamps).
+    for at, d in (spoken_dates(words, today)[:STAMP_MAX * 3] if opts.get("stamps") is True else []):
         if len(tl["stamps"]) >= STAMP_MAX or at < hook_end:
             continue
         b = next((b for b in reversed(list(blocks)) if float(b["start"]) <= at), None)
