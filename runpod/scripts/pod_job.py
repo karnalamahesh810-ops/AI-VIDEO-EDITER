@@ -312,15 +312,18 @@ def main() -> None:
                 if last and time.monotonic() - last > stall:
                     print(f"[pod] nothing for {int(stall // 60)} min: the job is stuck", flush=True)
                     pid_ = ((globals().get("_JOB") or {}).get("input") or {}).get("project_id") or ""
+                    # A batch: every video it has not finished (src/batch.py), each in its own row.
+                    rows_ = ([pid_] if pid_ else []) + [p for p in getattr(getattr(handler, "batch", None), "UNFINISHED", []) if p != pid_]
                     fields_ = {"status": "failed", "current_step": "Failed",
                                "error_message": f"The video stopped making progress for {int(stall // 60)} minutes. Start it again."}
-                    try:
-                        if pid_ and storage.broker_enabled() and storage.CURRENT_JOB[0]:
-                            storage._broker_patch(pid_, storage.CURRENT_JOB[0], fields_)
-                        elif pid_:
-                            storage.patch_project(pid_, fields_, wait=True)
-                    except Exception as e:  # noqa: BLE001 - the app's own check sees the pod gone
-                        print(f"[pod] could not say so: {type(e).__name__}", flush=True)
+                    for p_ in rows_:
+                        try:
+                            if storage.broker_enabled() and storage.CURRENT_JOB[0]:
+                                storage._broker_patch(p_, storage.CURRENT_JOB[0], fields_)
+                            else:
+                                storage.patch_project(p_, fields_, wait=True)
+                        except Exception as e:  # noqa: BLE001 - the app's own check sees the pod gone
+                            print(f"[pod] could not say so: {type(e).__name__}", flush=True)
                     _cancel_chunks()
                     stop_this_pod(terminate=terminate)
                     os._exit(4)

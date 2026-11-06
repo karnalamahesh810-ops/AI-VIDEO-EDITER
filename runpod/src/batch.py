@@ -50,6 +50,7 @@ project's updates by the job running for it.
 """
 import copy
 import math
+import os
 import threading
 import time
 import traceback
@@ -63,7 +64,43 @@ BIG_WRITE_SECONDS = 300.0       # how long the finished timeline may take to rea
 STATUS_WRITE_SECONDS = 600.0    # how long the final status may take (the app's database can be down for minutes)
 LAST_TRY_SECONDS = 60.0         # the one more try, at the end of the batch, for a final state that never got through
 RETRY_SECONDS = 15.0
+CANCEL_CONFIRM_SECONDS = 300.0  # a refusal no other row of the batch can vouch for is asked again this long (the database may be down)
+CANCEL_RETRY_SECONDS = 30.0
 CALL_SECONDS = 200.0            # the longest one project write can take (storage._broker_patch waits up to 180 s)
+
+
+def _refused(project_id: str, job_id: str, step: str) -> Optional[bool]:
+    """One small write to a project through the broker: False = it took it, True = it answered that this job no longer runs for this
+    project, None = no answer that means anything (the network, a 5xx)."""
+    try:
+        storage._broker({"action": "project_update", "project_id": project_id, "job_id": job_id, "fields": {"current_step": step}},
+                        timeout=60)
+        return False
+    except storage.StorageError as e:
+        return True if "job is not running" in str(e) else None
+    except Exception:  # noqa: BLE001 - not an answer about the project
+        return None
+
+
+def cancelled(project_id: str, job_id: str, others: List[str], step: str, sleep: Callable = time.sleep) -> Tuple[bool, bool]:
+    """
+    (skip it, confirmed): the app took this waiting video out of the batch (its row no longer carries this job). The broker gives the
+    same refusal while the app's database is down, so a refusal counts only when another row of the batch still answers (confirmed),
+    else after CANCEL_CONFIRM_SECONDS of asking (not confirmed). Without the broker, or with no clear answer, the video is built.
+    """
+    if not project_id or not job_id or not storage.broker_enabled():
+        return False, False
+    until = time.time() + CANCEL_CONFIRM_SECONDS
+    while True:
+        got = _refused(project_id, job_id, step)
+        if got is not True:
+            return False, False
+        for other in others:
+            if _refused(other, job_id, "Waiting for its turn") is False:
+                return True, True
+        if time.time() >= until:
+            return True, False
+        sleep(CANCEL_RETRY_SECONDS)
 
 
 def _int(value, default: int) -> int:
@@ -71,6 +108,11 @@ def _int(value, default: int) -> int:
         return int(value)
     except (TypeError, ValueError):
         return default
+
+
+# The projects of the batch running in this process with no final state yet: a pod that gives up on a hung job (scripts/pod_job.py)
+# writes them as failed before it goes, so no row stays "rendering".
+UNFINISHED: List[str] = []
 
 
 def _pid(raw) -> str:
@@ -84,7 +126,9 @@ def time_limit(inp: dict) -> float:
     execution timeout, where RunPod stops the job.
     """
     raw = inp.get("time_limit_seconds") if isinstance(inp, dict) else None
-    for value in (raw, config.BATCH_TIME_LIMIT_SECONDS):
+    # A pod stops at POD_MAX_SECONDS, not at the endpoint's limit (scripts/pod_job.py).
+    pod = os.environ.get("POD_MAX_SECONDS", "") or ("18000" if os.environ.get("POD_EXIT") == "terminate" else "")
+    for value in (raw, float(pod) - 600.0 if pod else None, config.BATCH_TIME_LIMIT_SECONDS):
         if value is None or isinstance(value, bool):
             continue
         try:
@@ -261,8 +305,15 @@ def _cost(out: dict, seconds: float, ran: bool) -> float:
         return 0.0
 
 
+def _was_cancelled(pid: str, job_id: str, n: int, total: int, others: List[str], sleep: Callable, row: dict) -> bool:
+    skip, sure = cancelled(pid, job_id, others, f"Starting (video {n} of {total})", sleep)
+    if skip and not sure:
+        row["unconfirmed"] = True       # no other row could vouch for the database: it may have been down
+    return skip
+
+
 def _one(job: dict, raw, defaults: dict, n: int, total: int, build: Callable[[dict], dict], sleep: Callable,
-         seen: Dict[str, int], clock: Optional[_Clock] = None) -> dict:
+         seen: Dict[str, int], clock: Optional[_Clock] = None, others: Optional[List[str]] = None) -> dict:
     """
     Run entry `n` (1-based) of the batch through the handler and record its final state in its project;
     never raises. `seen`: the projects built so far in this batch (project -> video number). Returns its row
@@ -274,6 +325,9 @@ def _one(job: dict, raw, defaults: dict, n: int, total: int, build: Callable[[di
     pid = str(raw.get("project_id") or "") if isinstance(raw, dict) else ""
     row: Dict[str, object] = {"index": n - 1, "project": pid}
     out: dict
+    title = str(raw.get("title") or "")[:120] if isinstance(raw, dict) else ""
+    if title:
+        row["title"] = title
     ran = False
     mine = True                         # this entry's final state is this entry's to write
     action = str({**defaults, **raw}.get("action") or "build").lower() if isinstance(raw, dict) else ""
@@ -285,6 +339,12 @@ def _one(job: dict, raw, defaults: dict, n: int, total: int, build: Callable[[di
         mine = False
     elif action != "build":
         out = {"ok": False, "error": f"a batch runs builds only (this entry asks for '{action[:40]}')"}
+    elif pid and job_id and _was_cancelled(pid, job_id, n, total, others or [], sleep, row):
+        print(f"[batch] video {n} of {total}: project {pid} was taken out of the batch, skipped", flush=True)
+        row.update(ok=True, skipped=True, status="skipped", seconds=round(time.time() - t0, 1), cost=0.0)
+        if pid in UNFINISHED:
+            UNFINISHED.remove(pid)
+        return row
     else:
         sub = _merged(defaults, raw)
         sub["action"] = "build"
@@ -315,6 +375,10 @@ def _one(job: dict, raw, defaults: dict, n: int, total: int, build: Callable[[di
     row.update(ok=not failed, seconds=round(seconds, 1), cost=round(_cost(out, seconds, ran), 4))
     if failed:
         row["error"] = str(out.get("error") or "failed")[:800]
+        if out.get("error_code"):
+            row["error_code"] = str(out["error_code"])
+            if out.get("empty_shots"):
+                row["empty_shots"] = out["empty_shots"]
     else:
         row.update(video_url=out.get("video_url") or "", duration=out.get("duration"))
     if pid and mine:
@@ -322,6 +386,8 @@ def _one(job: dict, raw, defaults: dict, n: int, total: int, build: Callable[[di
         row["saved"] = record(pid, job_id, out, sleep, (0.0, 0.0) if late else (BIG_WRITE_SECONDS, STATUS_WRITE_SECONDS))
         if not row["saved"] and not late:
             row["_out"] = out           # tried once more at the end of the batch
+    if pid in UNFINISHED and row.get("saved", True):
+        UNFINISHED.remove(pid)
     print(f"[batch] video {n} of {total}: {'failed' if failed else 'done'} in {int(seconds)}s"
           + (f" - {row['error'][:160]}" if failed else ""), flush=True)
     return row
@@ -365,6 +431,7 @@ def run(job: dict, build: Callable[[dict], dict], sleep: Callable = time.sleep) 
 
     rows: List[dict] = []
     seen: Dict[str, int] = {}
+    UNFINISHED[:] = [p for p in dict.fromkeys(_pid(r) for r in jobs) if p]
     clock = _Clock(time_limit(inp), started)
     limit_text = _hours(clock.limit) if clock.limit > 0 else ""
 
@@ -410,7 +477,8 @@ def run(job: dict, build: Callable[[dict], dict], sleep: Callable = time.sleep) 
                     clock.running = n
             if stopped:
                 break
-            row = _one(job, raw, defaults, n, total, build, sleep, seen, clock)
+            waiting = [p for p in dict.fromkeys(_pid(r) for r in jobs[n:]) if p and p not in seen]
+            row = _one(job, raw, defaults, n, total, build, sleep, seen, clock, waiting[:3])
             with clock.lock:
                 rows.append(row)
                 clock.running = 0
@@ -459,10 +527,18 @@ def run(job: dict, build: Callable[[dict], dict], sleep: Callable = time.sleep) 
                       "on the last try", flush=True)
 
     seconds = time.time() - started
-    done = [{k: r.get(k) for k in ("project", "index", "video_url", "duration", "seconds", "cost", "saved") if k in r}
-            for r in rows if r["ok"]]
-    failed = [{k: r.get(k) for k in ("project", "index", "error", "seconds", "cost", "saved") if k in r}
+    done = [{k: r.get(k) for k in ("project", "index", "title", "video_url", "duration", "seconds", "cost", "saved") if k in r}
+            for r in rows if r["ok"] and not r.get("skipped")]
+    skipped = [{k: r.get(k) for k in ("project", "index", "title", "unconfirmed") if k in r} for r in rows if r.get("skipped")]
+    failed = [{k: r.get(k) for k in ("project", "index", "title", "error", "error_code", "empty_shots", "seconds", "cost", "saved") if k in r}
               for r in rows if not r["ok"]]
+    # One row per video, in the batch's order, for the app's list (each project's own row has the same state live).
+    videos = [{"index": r["index"], "project": r["project"],
+               "status": "skipped" if r.get("skipped") else "done" if r["ok"] else
+               ("not_started" if str(r.get("error") or "").startswith("Not started") else "failed"),
+               **{k: r[k] for k in ("title", "video_url", "duration", "error", "error_code", "seconds", "cost", "saved", "unconfirmed") if k in r}}
+              for r in rows]
+    UNFINISHED[:] = [str(r["project"]) for r in rows if r["project"] and r.get("saved") is False]
     total_cost = round(sum(float(r.get("cost") or 0.0) for r in rows), 4)
     # Each build kept (and sent) its own event log; this one is the batch's.
     events.start_job(job_id, "")
@@ -483,7 +559,7 @@ def run(job: dict, build: Callable[[dict], dict], sleep: Callable = time.sleep) 
                 data={"total": total, "done": len(done), "failed": len(failed), "total_cost": total_cost,
                       "seconds": round(seconds, 1), "parallel": parallel, "time_limit": clock.limit,
                       "failed_projects": [f["project"] for f in failed]})
-    return {"ok": not failed, "action": "batch", "total": total, "done": done, "failed": failed,
+    return {"ok": not failed, "action": "batch", "total": total, "videos": videos, "done": done, "failed": failed, "skipped": skipped,
             "total_cost": total_cost, "seconds": round(seconds, 1), "parallel": parallel,
             **({"asked_parallel": asked} if asked != parallel else {}),
             "time_limit": clock.limit, **({"stopped": "time_limit"} if timed_out else {}),
