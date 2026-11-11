@@ -84,7 +84,7 @@ The target ($0.20-0.50) is in reach without the thumbnail; with flash-lite plann
 
 1. **OpenRouter top-up (~$1, owner)**, then: `python sdtest.py start gcd 8 4200` / `start elp 8 4200` + `wait`, then
    `compare.py gcd <server.mp4>` / `compare.py elp ...` for the side-by-side (scratchpad tools; see hand-over note).
-2. Library upload still running: 136/187 sources (5,497 shots) indexed; re-run `libindex.py` when it ends.
+2. Library upload done: 172 sources (12.3 GB), 6,856 shots indexed on thumbgenius-sdlib.
 3. Try `DIRECTOR_MODEL=google/gemini-2.5-flash-lite` for storm_desk plans (quality check needed).
 4. The test ledger sits in the public videos bucket (privacy): move ledgers to the private sdlib bucket.
 5. Ambience beds beyond `rushing_water` need licence-clean sources.
