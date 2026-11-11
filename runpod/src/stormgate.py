@@ -109,7 +109,9 @@ def _ocr() -> Optional[Any]:
         return None
     try:
         from rapidocr_onnxruntime import RapidOCR
-        reader = _tls.ocr = RapidOCR()
+        # Two threads per reader: onnxruntime otherwise sizes its pool by the HOST's cores (128 on a RunPod CPU
+        # machine, 8 of them ours) - 60+ spinning threads per reader, pinning errors in the log.
+        reader = _tls.ocr = RapidOCR(intra_op_num_threads=2, inter_op_num_threads=1)
         return reader
     except Exception as e:  # noqa: BLE001 - the edge-based check stands in
         with _OCR_LOCK:
