@@ -271,7 +271,8 @@ def estimate_usd(minutes: float, scenes: Optional[int] = None, extra: float = 0.
     m = max(0.0, float(minutes or 0.0))
     n = float(scenes) if scenes else m * float(getattr(config, "AI_EST_SCENES_PER_MIN", 13.0) or 13.0)
     plan = m * float(getattr(config, "AI_EST_PLAN_USD_PER_MIN", 0.045) or 0.0)
-    check = n * float(getattr(config, "AI_EST_CHECK_USD_PER_SCENE", 0.005) or 0.0)
+    # No vision judge (the Breaking News Desk's free checks, src/shotcheck.py): the clip checks cost nothing.
+    check = n * float(getattr(config, "AI_EST_CHECK_USD_PER_SCENE", 0.005) or 0.0) if getattr(config, "VISION_ENABLED", True) else 0.0
     margin = float(getattr(config, "AI_EST_MARGIN", 1.2) or 1.0)
     return round((plan + check) * margin + max(0.0, float(extra or 0.0)), 2)
 

@@ -2891,7 +2891,8 @@ def set_modes(doc: dict, marks_by_path: Dict[str, List[List[float]]]) -> None:
             else:
                 sd.pop("mode", None)
         path = _local(s) or str((s.get("media") or {}).get("url") or "")
-        if not sd.get("mode") and vid not in tuned and stormlib.AUTO_FRAME and path and os.path.isfile(path)                 and not s.get("natSound") and not s.get("openClip"):
+        if not sd.get("mode") and vid not in tuned and stormlib.AUTO_FRAME and path and os.path.isfile(path) \
+                and not s.get("natSound") and not s.get("openClip"):
             src_path = _source_file(vid) or path            # the source's shape, not the cut's (same pixels)
             from . import shotcheck
             framed = shotcheck.auto_frame(src_path)
