@@ -221,10 +221,33 @@ class Ledger:
             # The smart re-render's account (src/fanout.py render_pod): chunks reused, frames not drawn again
             # and what that saved - meta.costs.render.
             self.render: Optional[dict] = None
+            # Where the job's time and paid calls went, stage by stage (stage()): meta.costs.stages.
+            self.stage_name = "start"
+            self.stage_t = time.time()
+            self.stage_seconds: Dict[str, float] = defaultdict(float)
+            self.stage_usd: Dict[str, float] = defaultdict(float)
+
+    def stage(self, name: str) -> None:
+        """The job moved on to `name`: the time since the last mark goes to the stage before."""
+        now = time.time()
+        with self.lock:
+            self.stage_seconds[self.stage_name] += max(0.0, now - self.stage_t)
+            self.stage_name, self.stage_t = str(name), now
+
+    def stages(self) -> dict:
+        now = time.time()
+        with self.lock:
+            secs = dict(self.stage_seconds)
+            secs[self.stage_name] = secs.get(self.stage_name, 0.0) + max(0.0, now - self.stage_t)
+            usd = dict(self.stage_usd)
+        return {k: {"seconds": round(v, 1), **({"paidUsd": round(usd[k], 4)} if usd.get(k) else {})}
+                for k, v in secs.items() if v >= 0.05 or usd.get(k)}
 
     def record(self, key: str, units: float = 1.0) -> None:
         with self.lock:
             self.units[key] += float(units)
+            if key.endswith(".usd") and key.count(".") == 1:       # a provider's own price: the stage it was spent in
+                self.stage_usd[self.stage_name] += float(units)
             # One answer that came with its provider's own price (vision/director _note_usage):
             # counted, so the calls priced that way are not estimated from credits as well.
             if key.endswith(".usd") and key[:-4] in _MEASURED and float(units) > 0:
@@ -384,7 +407,17 @@ def absorb(child: Optional[dict], billed_seconds: Optional[float] = None) -> Non
 
 
 def summary(worker_seconds: Optional[float] = None) -> dict:
-    return LEDGER.summary(worker_seconds)
+    out = LEDGER.summary(worker_seconds)
+    try:
+        out["stages"] = LEDGER.stages()
+    except Exception:  # noqa: BLE001 - the summary stands without it
+        pass
+    return out
+
+
+def stage(name: str) -> None:
+    """Mark the start of a job stage (meta.costs.stages: seconds and provider-priced spend per stage)."""
+    LEDGER.stage(name)
 
 
 def note_render(stats: Optional[dict]) -> None:

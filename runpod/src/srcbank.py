@@ -704,6 +704,88 @@ def review(src: Source, story_line: str = "", ask: Optional[Callable] = None) ->
     return True
 
 
+def free_mode() -> bool:
+    """The free checks (config.STORM_FREE, the Breaking News Desk's default): no vision model reviews or matches; the kit's
+    local checks and CLIP do."""
+    return bool(getattr(config, "STORM_FREE", False))
+
+
+_FREE_WHY = {"text": "text", "face": "people", "person": "people", "dark": "dark", "bars": "bars", "pillar": "framed",
+             "read": "unreadable", "error": "unreadable"}
+
+
+def review_local(src: Source, story_line: str = "") -> bool:
+    """review() without a model: each shot screened by the kit's clean() (src/shotcheck.py: dark, bars, pillarbox, faces,
+    people, text; verdicts shared on R2), then CLIP against the library's reject labels (anchor, reporter, graphic, map,
+    room...). No description and a neutral quality: matching is CLIP's (match_local)."""
+    from . import shotcheck, stormlib
+    if not src.pieces:
+        return False
+    mode = stormlib.screen_mode(src.id, src.channel, src.path)
+
+    def one(p: Piece) -> None:
+        why = shotcheck.screen(src.id, src.path, float(p.start), float(p.end), mode)
+        word = why.split(" ")[0] if why else ""
+        p.ok = not why
+        p.why = _FREE_WHY.get(word, word or "")[:20]
+        p.band = False
+        p.desc = ""
+        p.quality = 0.5 if p.ok else None
+    with ThreadPoolExecutor(max(1, min(6, (os.cpu_count() or 4) // 2))) as ex:
+        list(ex.map(one, src.pieces))
+    try:
+        _clip_reject(src, story_line)
+    except Exception as e:  # noqa: BLE001 - the pixel checks stand
+        print(f"[bank] CLIP labels skipped: {type(e).__name__}", flush=True)
+    _STATE["stats"]["reviewsLocal"] = _STATE["stats"].get("reviewsLocal", 0) + 1
+    return True
+
+
+def _clip_reject(src: Source, story_line: str = "") -> None:
+    """Shots CLIP sees as an anchor, a reporter, a graphic, a map, a room... (src/stormlib.py REJECT) leave the bank."""
+    import numpy as np
+    from PIL import Image
+    from . import localvision, stormlib
+    todo = [p for p in src.pieces if p.ok and p.frame and os.path.exists(p.frame)]
+    if not todo or not localvision.available():
+        return
+    keep = ["real outdoor video footage of " + (story_line[:120] or "weather, water and landscape"),
+            "aerial drone footage of a river, lake, dam or flooded land", "storm clouds, rain, snow or waves on video"]
+    labels = list(stormlib.REJECT.keys()) + ["ok"] * len(keep)
+    T = localvision.embed_texts(list(stormlib.REJECT.values()) + keep)
+    E = localvision.embed_images([Image.open(p.frame).convert("RGB") for p in todo])
+    lg = 100.0 * E @ T.T
+    lg -= lg.max(axis=1, keepdims=True)
+    pr = np.exp(lg)
+    pr /= pr.sum(axis=1, keepdims=True)
+    bad = np.array([lab != "ok" for lab in labels])
+    for p, row, e in zip(todo, pr, E):
+        p.vec = e
+        if float(row[bad].sum()) > 0.6:
+            p.ok, p.why, p.quality = False, labels[int(np.argmax(row))][2:][:20], None
+
+
+def match_local(lines: Sequence[dict], pieces: Sequence[Piece]) -> Dict[int, List[Tuple[str, float]]]:
+    """match() without a model: each line's words against each shot's middle frame in CLIP (src/localvision.py), as
+    stormlib ranks the library. A fit of 0.5 is a cosine of about 0.23."""
+    import numpy as np
+    from . import localvision
+    out: Dict[int, List[Tuple[str, float]]] = {}
+    have = [p for p in pieces if p.vec is not None]
+    if not have or not lines or not localvision.available():
+        return out
+    V = np.stack([np.asarray(p.vec, np.float32) for p in have])
+    texts = [f"{j.get('place') or ''} {j.get('subject') or ''}. {str(j.get('context') or '')[:200]}".strip() for j in lines]
+    T = localvision.embed_texts(texts)
+    S = T @ V.T
+    tail_n = int(getattr(config, "SOURCE_BANK_TAIL", 40))
+    for j, row in zip(lines, S):
+        order = np.argsort(-row)[:tail_n]
+        out[j["index"]] = [(have[k].pid, round(float(min(1.0, max(0.0, (row[k] - 0.16) / 0.14))), 3)) for k in order]
+    _STATE["stats"]["matchLocal"] = _STATE["stats"].get("matchLocal", 0) + len(lines)
+    return out
+
+
 _ROW = re.compile(r'\{[^{}]*"n"\s*:\s*\d+[^{}]*\}')
 
 
@@ -1218,10 +1300,11 @@ def build(jobs: Sequence[dict], work: str, *, require_cc: bool = False, report: 
             return src
         if not src.cached:
             with _Timer("review"):
-                if not review(src, story_line):
+                if not (review_local(src, story_line) if free_mode() else review(src, story_line)):
                     src.why = "not reviewed"
                     return src
-            save_review(src)
+            if not free_mode():         # a local review is no model review: its verdicts live in shotcheck's shared file
+                save_review(src)
         else:
             _frames_for_cached(src, folder)
         src.why = src.why or judge_source(src)
@@ -1278,7 +1361,7 @@ def fill(jobs: Sequence[dict], work: str, *, require_cc: bool = False, report: O
         if report:
             report(f"Matching {len(lines)} lines to {len(pieces)} reviewed shots", 30)
         with _Timer("match"):
-            ranks = match(lines, pieces, story_line)
+            ranks = match_local(lines, pieces) if free_mode() else match(lines, pieces, story_line)
         _STATE["ranks"] = ranks
         got = _place_and_cut(lines, ranks, pieces)
         _STATE["stats"]["filled"] += len(got)

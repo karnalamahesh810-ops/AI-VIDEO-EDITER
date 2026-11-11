@@ -52,6 +52,9 @@ FETCH_PARALLEL = 6
 FETCH_TRIES = 3
 FETCH_MAX_GB = 40.0             # a pod's disk: sources kept at once
 CACHE_SECONDS = 3600.0
+PRESCREEN = os.getenv("STORM_PRESCREEN", "1").strip().lower() not in ("0", "false", "off", "no")
+AUTO_FRAME = os.getenv("STORM_AUTO_FRAME", "1").strip().lower() not in ("0", "false", "off", "no")
+PLACE_ROUNDS = 6                # a refused stretch places its line again
 REJECT = {                      # tools/libpick.py
     "X_anchor": "a TV news anchor sitting at a desk in a television studio",
     "X_reporter": "a TV news reporter standing outdoors holding a microphone and talking to the camera",
@@ -528,6 +531,52 @@ def _over_creator_cap(plan: Dict[int, tuple], srcs: Sequence[Any], per_creator: 
     return over
 
 
+def screen_mode(vid: str, channel: str, path: str = "") -> str:
+    """How the render will frame this source (a tuned crop, a station's crop, its own shape, else the full frame): the screen
+    sees what the viewer will. Same rule as stormdesk.set_modes."""
+    from . import stormdesk
+    tuned = station_modes()
+    if vid in tuned:
+        return str(tuned[vid] or "full")
+    crop = stormdesk.station_crop(channel)
+    if crop:
+        return crop
+    if path and AUTO_FRAME:
+        from . import shotcheck
+        return shotcheck.auto_frame(path) or "full"
+    return "full"
+
+
+def prescreen(plan: Dict[int, tuple], srcs: Sequence[Any], idx: Index) -> List[int]:
+    """The kit's tools/prescreen.py on what is about to be cut: each placed stretch screened once (free checks, verdicts
+    shared through src/shotcheck.py). A refused stretch is never offered again, here or in any later video. Returns the
+    lines to place again."""
+    from . import shotcheck
+    rows = []
+    for i, v in plan.items():
+        p = v[0]
+        src = srcs[p.src]
+        if not src.path:
+            continue
+        rows.append((i, p, src))
+
+    def one(row: tuple) -> Tuple[int, str]:
+        i, p, src = row
+        return i, shotcheck.screen(src.id, src.path, float(p.start), float(p.end), screen_mode(src.id, src.channel, src.path))
+    refused: List[int] = []
+    with ThreadPoolExecutor(max(1, min(8, (os.cpu_count() or 4) // 2))) as ex:
+        for i, why in ex.map(one, rows):
+            if not why:
+                continue
+            p = plan[i][0]
+            p.bad = True
+            remember_bad(srcs[p.src].id, float(p.start), float(p.end))
+            STATS["prescreenRefused"] = STATS.get("prescreenRefused", 0) + 1
+            refused.append(i)
+    STATS["prescreened"] = STATS.get("prescreened", 0) + len(rows)
+    return refused
+
+
 def place_and_cut(idx: Index, lines: Sequence[dict], ranks: Dict[int, List[Tuple[int, float]]], free: Dict[int, Tuple[float, float]], work: str,
                   *, floor: float = FLOOR, relax: float = 1.0, neighbours: Optional[Dict[int, str]] = None,
                   fetch: Optional[Callable[[str, dict, str], str]] = None) -> Dict[int, Any]:
@@ -542,7 +591,7 @@ def place_and_cut(idx: Index, lines: Sequence[dict], ranks: Dict[int, List[Tuple
     out: Dict[int, Any] = {}
     todo = list(lines)
     per_creator: Dict[str, int] = {}
-    for _round in range(4):
+    for _round in range(PLACE_ROUNDS):
         if not todo:
             break
         plan = srcbank.place(todo, pid_ranks, list(pieces.values()), floor=floor, relax=relax, neighbours=neighbours)
@@ -575,9 +624,13 @@ def place_and_cut(idx: Index, lines: Sequence[dict], ranks: Dict[int, List[Tuple
                                 for q in s.pieces:
                                     q.bad = True
         jobs = {j["index"]: j for j in todo}
+        refused = prescreen(plan, srcs, idx) if PRESCREEN else []
+        retry = [jobs[i] for i in refused]
+        for i in refused:
+            srcbank.release(i)
+            plan.pop(i)
         with ThreadPoolExecutor(max(1, int(getattr(config, "SOURCE_BANK_CUT_PARALLEL", 6)))) as ex:
             got = dict(zip(plan.keys(), ex.map(lambda kv: _cut_one(kv[1][0], kv[1][1], kv[1][2], jobs[kv[0]], kv[1][3]), plan.items())))
-        retry = []
         for i, asset in got.items():
             if asset is None:
                 srcbank.release(i)

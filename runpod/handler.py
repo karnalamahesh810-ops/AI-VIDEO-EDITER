@@ -1267,6 +1267,7 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         except (TypeError, ValueError, IndexError):
             words = None
     if not words:
+        costs.stage("transcribe")
         words = transcribe.transcribe_words(
             audio_path, language=inp.get("language"),
             # 8 -> 13%: the band between download and the planner.
@@ -1324,6 +1325,7 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
         brief = dict(loaded["brief"])
         print("[resume] the story brief kept from the stopped run: no planning call", flush=True)
     else:
+        costs.stage("director")
         brief = director.story_brief(segments, title, configured=director.is_configured())
     resume.note_brief(brief, segments)
     # The account ran dry (or the key was refused) on the brief: stop now - never a plan from the rules.
@@ -1573,12 +1575,14 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     if desk_pieces and not require_cc and open_jobs:
         # The footage library on R2 first (src/stormlib.py): shots searched in seconds, only the sources placed fetched.
         srcbank.block_sources(stormlib.bad_sources())
+        costs.stage("library")
         from_library = stormlib.fill(open_jobs, work, inp=inp, story=brief, led=stormdesk.JOB_LEDGER, report=report)
         if from_library:
             banked.update(from_library)
             open_jobs = [j for j in open_jobs if j["index"] not in banked]
     if srcbank.enabled() and inp.get("allow_youtube") is not False and not require_cc and open_jobs:
         report("Finding and reviewing whole sources", 22, done=0, total=len(open_jobs))
+        costs.stage("source bank")
         from_bank = srcbank.fill(open_jobs, work, require_cc=require_cc, report=report,
                                  story_line=_bank_story_line(title, brief))
         banked.update(from_bank)
@@ -1592,6 +1596,7 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     pools_wanted = bool(config.SUBJECT_POOLS and inp.get("allow_youtube") is not False)
     in_parts = bool(pools_wanted and config.POOLS_IN_PARTS and open_jobs
                     and fanout.enabled_for(len(open_jobs), project_id))
+    costs.stage("per-line search")
     if pools_wanted and not in_parts:
         report("Finding footage by subject", 22, done=0, total=len(open_jobs))
         pooled = pools.source_by_subject(open_jobs, work, require_cc=require_cc, report=report, library=lib)
@@ -1743,6 +1748,7 @@ def do_plan(inp: dict, work: str, report: Reporter) -> dict:
     # before the ladder's pictures, holds and cards (src/srcbank.py fill_gaps).
     if srcbank.enabled() and any(results_by_index[j["index"]] is None for j in fill_jobs):
         try:
+            costs.stage("gap fill")
             extra = srcbank.fill_gaps(fill_jobs, results_by_index, work)
         except Exception as e:  # noqa: BLE001 - the ladder below
             print(f"[worker] source bank gap fill skipped: {type(e).__name__}: {str(e)[:120]}", flush=True)
@@ -2082,6 +2088,7 @@ def _storm_desk(doc: dict, inp: dict, work: str, report: Reporter) -> None:
         return _store_narration(path, "_stormdesk.mp3", inp) or path
     try:
         brief = (doc.get("meta") or {}).get("story") or {}
+        costs.stage("finish + gates")
         rep = stormdesk.finish(doc, inp, brief, work, ask=ask, upload=upload,
                                frame_vertical=upscale.frame_vertical if config.ALLOW_VERTICAL else None,
                                listen=listen, renarrate=renarrate)
@@ -2835,6 +2842,7 @@ def _job_deadline(inp: dict) -> float:
 
 def do_render(doc: dict, inp: dict, work: str, report: Reporter,
               split: bool = False) -> dict:
+    costs.stage("render")
     # This render's own account only: a warm worker kept the last job's.
     for key in ("render_manifest", "pod_render", "render_fanout"):
         media.LAST_STATS.pop(key, None)
@@ -2974,6 +2982,7 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter,
         # anything else keeps the drawn file as it is and says so.
         report("Storm desk: pause sound, loudness, clean file", 90)
         try:
+            costs.stage("mix + checks")
             sd = stormdesk.after_render(doc, out_path, work)
         except stormdesk.SyncError:
             raise
@@ -2985,6 +2994,7 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter,
         if (doc["meta"].get("stormDesk") or {}).get("engineFallback"):
             sd["engineFallback"] = doc["meta"]["stormDesk"]["engineFallback"]
         doc["meta"].setdefault("stormDesk", {})["render"] = sd
+        costs.stage("ledger + thumbnails")
         _storm_desk_done(doc, inp, work, sd)
     # What goes back with the video: the gate's report and, when it ran, the review's.
     reports = {"quality": checked}
@@ -3014,6 +3024,7 @@ def do_render(doc: dict, inp: dict, work: str, report: Reporter,
 def deliver_video(out_path: str, inp: dict, doc: dict, duration: float, work: str, reports: dict) -> dict:
     """The finished file to where the app reads it (inline, a signed URL, R2, the broker or the app's
     storage), with `reports` riding along. Shared by do_render and the celeb style (src/celeb/pipeline.py)."""
+    costs.stage("upload")
     LAST_FRAMES.clear()
     if inp.get("return_frames"):
         LAST_FRAMES.extend(_contact_sheets(out_path, work))
@@ -3365,6 +3376,11 @@ def _storm_desk_done(doc: dict, inp: dict, work: str, sd: dict) -> None:
         sd["ledgerSaved"] = stormledger.save(inp, led)
     except Exception as e:  # noqa: BLE001
         sd["ledgerError"] = f"{type(e).__name__}: {str(e)[:160]}"
+    try:        # refused moments and every screened stretch, for every later video on any pod
+        sd["librarySaved"] = stormdesk._flush_library()
+        sd["library"] = stormdesk._library_report()
+    except Exception as e:  # noqa: BLE001
+        sd["libraryError"] = f"{type(e).__name__}: {str(e)[:160]}"
     if stormpieces.engine_of(doc) != "pieces" or stormdesk.options(inp).get("thumbnails") is False:
         return
     try:
@@ -3398,7 +3414,8 @@ def _done_fields(out: dict) -> dict:
 # Settings a job may override for itself ({"config": {...}} in the input), so
 # the benchmark can A/B a selection change on one image. Coerced to the type
 # the setting already has; anything else is ignored.
-CONFIG_OVERRIDABLE = ("STORM_DESK_ENGINE", "STORM_LIBRARY", "STORM_STATION_SHOTS", "CANDIDATE_POOL", "ANIMATION_FILL", "GAMEPLAY_FOOTAGE", "JUDGE_BEST_OF", "EXCELLENT_SCORE", "JUDGE_MAX_PER_SCENE",
+CONFIG_OVERRIDABLE = ("STORM_DESK_ENGINE", "STORM_LIBRARY", "STORM_FREE", "VISION_ENABLED", "OFFTOPIC_AI", "HOOK_CUT_CHECK",
+                      "SOURCE_BANK_MODEL_MATCH", "SOURCE_BANK", "STORM_STATION_SHOTS", "CANDIDATE_POOL", "ANIMATION_FILL", "GAMEPLAY_FOOTAGE", "JUDGE_BEST_OF", "EXCELLENT_SCORE", "JUDGE_MAX_PER_SCENE",
                       "POOL_EXTRA_QUERIES", "POOL_SCOUT", "INTENT_QUERIES_MAX",
                       "VISION_MAX_CANDIDATES", "META_WEIGHTS", "FINAL_WEIGHTS",
                       "TREATMENTS", "STYLE_PACK", "MOMENT_FINE_PASS", "CLEAN_CUTS",

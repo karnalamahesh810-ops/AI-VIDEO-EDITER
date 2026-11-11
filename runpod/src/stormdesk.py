@@ -76,6 +76,7 @@ J_LEAD = 0.35                   # a pause's sound starts this much before its pi
 L_TAIL = 0.6                    # ... and fades out under the narration's first words after it (an L cut)
 BGM_LUFS = -39.0                # the owner's music, integrated, ~10-11% of the voice's level (kit bgm_lufs, 2026-11-06) ...
 BGM_ONLY_UNDER_VOICE = True     # ... and only while he speaks: none during a clip's own sound (kit bgm_only_under_voice)
+MUSIC_DEFAULT = os.getenv("STORM_MUSIC_DEFAULT", "0").strip().lower() in ("1", "true", "on", "yes")
 WATER_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sdkit", "ambience", "rushing_water.mp3")
 WATER_SILENT_DB = -60.0         # a first hook clip quieter than this has no sound of its own (kit tools/hookwater.py)
 WATER_LEVEL = 0.55
@@ -2549,6 +2550,42 @@ def bgm_options(opts: Optional[dict]) -> dict:
     return {"lufs": lufs, "onlyUnderVoice": opts.get("bgm_only_under_voice", BGM_ONLY_UNDER_VOICE) is not False}
 
 
+def music_wanted(opts: Optional[dict]) -> bool:
+    """storm_desk.music: true plays the job's tracks; anything else (the default since 2026-11-10) is no music."""
+    opts = opts or {}
+    m = opts.get("music", MUSIC_DEFAULT)
+    return m is True or str(m).strip().lower() in ("1", "true", "on", "yes")
+
+
+def set_amb_beds(doc: dict, opts: Optional[dict]) -> int:
+    """storm_desk.amb_bed (a bed's name or link) under every pause clip whose own sound is not nature (and is no talking clip);
+    storm_desk.amb_beds {"<pause second>": bed} for one pause (the kit's picks "break_amb"). Returns how many got one."""
+    opts = opts or {}
+    default = opts.get("amb_bed")
+    per = opts.get("amb_beds") if isinstance(opts.get("amb_beds"), dict) else {}
+    fps = int(doc.get("fps") or 30)
+    n = 0
+    for s in doc.get("scenes") or []:
+        if not s.get("natSound") or s.get("talk"):
+            continue
+        t0 = int(s["startFrame"]) / float(fps)
+        bed = next((v for k, v in per.items() if _num(k) is not None and abs(float(_num(k)) - t0) <= 1.5), None)
+        kind = str(((s.get("media") or {}).get("clipAudio") or {}).get("kind") or "")
+        if bed is None and default and kind not in ("nature", ""):
+            bed = default
+        if bed:
+            s.setdefault("stormDesk", {})["ambBed"] = bed
+            n += 1
+    return n
+
+
+def _num(x: Any) -> Optional[float]:
+    try:
+        return float(x)
+    except (TypeError, ValueError):
+        return None
+
+
 def music_plan(tracks: Any, total: float) -> List[dict]:
     """The owner's tracks in turn over the video (the kit's picks "music": inv1, sus1, crime, crossfaded): links or
     {"url", "at", "offset"}; a track with no time gets its even share of the video."""
@@ -2854,9 +2891,24 @@ def set_modes(doc: dict, marks_by_path: Dict[str, List[List[float]]]) -> None:
             else:
                 sd.pop("mode", None)
         path = _local(s) or str((s.get("media") or {}).get("url") or "")
+        if not sd.get("mode") and vid not in tuned and stormlib.AUTO_FRAME and path and os.path.isfile(path)                 and not s.get("natSound") and not s.get("openClip"):
+            src_path = _source_file(vid) or path            # the source's shape, not the cut's (same pixels)
+            from . import shotcheck
+            framed = shotcheck.auto_frame(src_path)
+            if framed:
+                sd["mode"] = framed
         boxes = marks_by_path.get(path) or []
         if boxes:
             sd["delogo"] = _visible_marks(boxes, str(sd.get("mode") or ""))
+
+
+def _source_file(vid: str) -> str:
+    """The whole source on this disk (library or bank), "" when only the cut is here."""
+    from . import srcbank
+    for src in srcbank._STATE.get("sources") or []:
+        if src.id == vid and src.path and os.path.isfile(src.path):
+            return src.path
+    return ""
 
 
 def station_crop(channel: str) -> str:
@@ -3236,6 +3288,10 @@ def finish(doc: dict, inp: dict, brief: Optional[dict] = None, work: str = "", f
         doc["stormDesk"]["statStyle"] = stormlooks.stat_options(opts)
         doc["stormDesk"]["bgm"] = bgm_options(opts)
         doc["stormDesk"]["music"] = music_plan(opts.get("bgm_tracks"), int(doc.get("durationInFrames") or 0) / float(fps))
+        # The owner (2026-11-10): no background music at all, and none from the clips. Music only when a job asks for it.
+        doc["stormDesk"]["noMusic"] = not music_wanted(opts)
+        rep["noMusic"] = doc["stormDesk"]["noMusic"]
+        rep["ambBeds"] = step("ambience beds", lambda: set_amb_beds(doc, opts)) or 0
         looks = step("looks", lambda: stormlooks.timeline(doc, blocks, pauses, brief, day, work, ask, opts=opts))
         if looks:
             doc["stormDesk"]["looks"] = looks
@@ -3304,13 +3360,22 @@ def finish(doc: dict, inp: dict, brief: Optional[dict] = None, work: str = "", f
 
 
 def _flush_library() -> bool:
-    from . import stormlib
+    from . import shotcheck, stormlib
+    try:
+        shotcheck.flush()
+    except Exception as e:  # noqa: BLE001 - the video goes on
+        print(f"[stormdesk] shared verdicts: {type(e).__name__}", flush=True)
     return stormlib.flush_bad()
 
 
 def _library_report() -> dict:
-    from . import stormlib
-    return stormlib.report()
+    from . import shotcheck, stormlib
+    rep = stormlib.report()
+    try:
+        rep["freeChecks"] = shotcheck.report()
+    except Exception:  # noqa: BLE001
+        pass
+    return rep
 
 
 def _youtube_report() -> dict:
@@ -3337,6 +3402,31 @@ def _tab_for(text: str, brief: Optional[dict]) -> str:
 
 class SyncError(RuntimeError):
     """The drawn picture and the timeline disagree: the video must not ship (handler.do_render lets it fail)."""
+
+
+AMB_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sdkit", "ambience")
+
+
+def amb_bed_file(scene: dict, resolve: Optional[Callable] = None) -> str:
+    """A pause clip's own ambience bed (the kit's picks "break_amb" / render3 amb_bed: the clip talks or has music, so a real
+    bed plays under its picture instead): scene.stormDesk.ambBed = a bed's name in sdkit/ambience ("rushing_water") or a
+    link. True = the default water. "" = the clip's own sound."""
+    want = (scene.get("stormDesk") or {}).get("ambBed")
+    if not want:
+        return ""
+    if want is True:
+        return WATER_FILE
+    want = str(want)
+    if want.startswith(("http://", "https://")):
+        try:
+            return resolve(want) if resolve else ""
+        except Exception:  # noqa: BLE001 - its own sound then
+            return ""
+    for ext in (".mp3", ".wav", ".m4a"):
+        p = os.path.join(AMB_DIR, os.path.basename(want).rsplit(".", 1)[0] + ext)
+        if os.path.isfile(p):
+            return p
+    return WATER_FILE
 
 
 def _read_audio(src: str, start: float, seconds: float, sr: int, af: str = "") -> "Any":
@@ -3384,12 +3474,16 @@ def nat_track(doc: dict, total: float, offset: float, sr: int = 48000, resolve: 
         elif nxt is not None and nxt.get("natSound"):
             tail = 0.0                          # the next clip's own sound starts here
         music = str(((s.get("media") or {}).get("clipAudio") or {}).get("kind") or "") == "music" and not s.get("talk")
-        if music:
+        bed = amb_bed_file(s, resolve)
+        if music or bed:
             lead, tail = 0.0, 0.0               # never a clip's music in a pause (the kit): real water plays instead
         a, b = a - lead, b + tail
         trim = trim0 - lead
         try:
-            if music:
+            if bed:                             # the kit's per-pause amb_bed: this clip's own bed (surf, wind, rumble)
+                at = float(((s.get("stormDesk") or {}).get("ambAt")) or 0.0)
+                x = _read_audio(bed, at, b - a, sr, f"loudnorm=I={NAT_LUFS}:TP=-3:LRA=11")
+            elif music:
                 x = _read_audio(WATER_FILE, water_at, b - a, sr, f"loudnorm=I={NAT_LUFS}:TP=-3:LRA=11")
                 water_at = (water_at + (b - a)) % 10.0
             else:
@@ -3413,7 +3507,8 @@ def nat_track(doc: dict, total: float, offset: float, sr: int = 48000, resolve: 
             g[-r_out:] = np.linspace(1, 0, r_out)
         track[o:o + m] += x[:m] * g[:, None]
         rows.append({"at": round(a, 2), "seconds": round(m / sr, 2), "ok": True, "lead": round(lead, 2),
-                     "tail": round(tail, 2), **({"water": "its sound is music"} if music else {})})
+                     "tail": round(tail, 2), **({"water": "its sound is music"} if music and not bed else {}),
+                     **({"bed": os.path.basename(bed)} if bed else {})})
     return track, rows
 
 

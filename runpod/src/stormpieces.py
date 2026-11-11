@@ -78,7 +78,8 @@ def supported(doc: dict) -> str:
 # --------------------------------------------------------------------------- #
 def vf_for(mode: str, w: int, h: int) -> str:
     """The filter from a source frame to 1920x1080. mode: full | vert | newsK@TOP (a centred crop, K of the frame from
-    TOP down: drops a station's lower third, corner bug and ticker) | boxX,Y,W,H (a clip framed inside the frame) | ai."""
+    TOP down: drops a station's lower third, corner bug and ticker) | boxX,Y,W,H (a clip framed inside the frame) | ai |
+    fit (a square / 4:3 clip whole on its blurred fill) | rect:X,Y,W,H (the picture inside letterbox bars) | pillarK."""
     upscale = h < 1000
     sharpen = ",unsharp=5:5:0.6:5:5:0.0" if upscale else ""
     if mode.startswith("box"):
@@ -89,6 +90,19 @@ def vf_for(mode: str, w: int, h: int) -> str:
         return (pre + "split[a][b];[a]scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,boxblur=28:2,"
                 "eq=brightness=-0.06:saturation=0.85[bg];[b]scale=-2:1080:flags=lanczos"
                 f"{sharpen}[fg];[bg][fg]overlay=(W-w)/2:0")
+    if mode.startswith("pillar"):               # a vertical clip a source pillarboxed: its centre strip, then as vert
+        k = float(mode[6:] or 1.0)
+        return (f"crop=ih*9/16:ih*{k}:(iw-ih*9/16)/2:0,split[a][b];[a]scale=1920:1080:force_original_aspect_ratio=increase,"
+                "crop=1920:1080,boxblur=28:2,eq=brightness=-0.06:saturation=0.85[bg];[b]scale=1135:1080:"
+                f"force_original_aspect_ratio=increase:flags=lanczos,crop=1135:1080{sharpen}[fg];[bg][fg]overlay=392:0")
+    if mode == "fit":                           # a square / 4:3 clip shown whole, its own blur on the sides (kit render3)
+        return ("scale=iw*sar:ih,setsar=1,split[a][b];[a]scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,"
+                "boxblur=28:2,eq=brightness=-0.04:saturation=0.85[bg];[b]scale=-2:1080:flags=lanczos"
+                f"{sharpen}[fg];[bg][fg]overlay=(W-w)/2:0")
+    if mode.startswith("rect:"):                # the picture inside a letterboxed / odd-SAR source (fractions x,y,w,h)
+        x, y, w_, h_ = (float(v) for v in mode[5:].split(","))
+        return (f"crop=iw*{w_}:ih*{h_}:iw*{x}:ih*{y},scale=iw*sar:ih,setsar=1,scale=1920:1080:"
+                f"force_original_aspect_ratio=increase:flags=lanczos,crop=1920:1080{sharpen}")
     if mode == "vert":
         return ("split[a][b];[a]scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,boxblur=28:2,"
                 "eq=brightness=-0.06:saturation=0.85[bg];[b]scale=1135:1080:force_original_aspect_ratio=increase:"
@@ -187,7 +201,8 @@ def scene_spec(doc: dict, i: int, ev: Optional[List[tuple]] = None, looks: Optio
     fixed: List[list] = []
     if (desk.get("logo") or {}).get("url") or (desk.get("logo") or {}).get("text"):
         fixed.append(["bug"])
-    if s.get("blurSides") and desk.get("sideLogo") is not False:
+    mode = _clip_mode(s)
+    if (s.get("blurSides") or mode in ("fit", "vert") or mode.startswith("pillar")) and desk.get("sideLogo") is not False:
         fixed.append(["side"])
     cr = s.get("credit") or {}
     if cr.get("ai"):                             # no source names and no ARCHIVE tag on screen (the owner 2026-11-06)
@@ -805,6 +820,8 @@ def _decode(src: str, af: str, seconds: Optional[float] = None, start: float = 0
 def music_sections(doc: dict) -> List[dict]:
     """[{"url", "at" seconds, "offset" seconds into the track}], from doc.stormDesk.music (several of the owner's tracks,
     crossfaded), else the one track the job gave (doc.bgm / doc.music)."""
+    if (doc.get("stormDesk") or {}).get("noMusic"):
+        return []                       # the owner's rule since 2026-11-10: no music at all
     d = (doc.get("stormDesk") or {}).get("music")
     if isinstance(d, list) and d:
         return [{"url": str(x["url"]), "at": float(x.get("at") or 0.0), "offset": float(x.get("offset") or 0.0)}

@@ -19,6 +19,14 @@ os.environ.setdefault("VOICE_POLISH", "0")
 # The storm desk tests of the Remotion path stay on it; tests/test_stormpieces.py switches on the pieces engine itself.
 os.environ.setdefault("STORM_DESK_ENGINE", "remotion")
 os.environ.setdefault("STORM_PIECES_R2", "0")
+# The free checks (2026-11-11: src/shotcheck.py, srcbank.review_local, no paid judging, no music by default) are the
+# style's new default; the suite's older tests describe the paid path, so they stay off here. tests/test_storm_free.py
+# switches each on around its own checks.
+os.environ.setdefault("STORM_FREE", "0")
+os.environ.setdefault("STORM_FULL_CHECKS", "0")
+os.environ.setdefault("STORM_PRESCREEN", "0")
+os.environ.setdefault("STORM_AUTO_FRAME", "0")
+os.environ.setdefault("STORM_MUSIC_DEFAULT", "1")
 # The smart re-render (src/rendercache.py) reads and keeps chunks in R2 by a project's id: the suite's renders
 # would list a mocked bucket. tests/test_render_cache.py switches it on around its own renders.
 os.environ.setdefault("RENDER_CACHE", "0")

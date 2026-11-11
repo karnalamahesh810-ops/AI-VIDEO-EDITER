@@ -200,9 +200,13 @@ def public_buckets() -> set:
     return {b for b in (str(getattr(config, "R2_BUCKET", "") or ""), str(getattr(config, "R2_LIBRARY_BUCKET", "") or "")) if b}
 
 
-def push(kit: str, bucket: str, upload: bool = False, workers: int = 1, limit: int = 0, r2=None, out=print) -> dict:
-    """Dry run unless `upload`. Returns its report."""
+def push(kit: str, bucket: str, upload: bool = False, workers: int = 1, limit: int = 0, r2=None, out=print,
+         only: Optional[List[str]] = None) -> dict:
+    """Dry run unless `upload`. Returns its report. `only`: these source ids, in this order (a partial library)."""
     sources, left = plan(kit)
+    if only:
+        by_id = {s["id"]: s for s in sources}
+        sources = [by_id[v] for v in only if v in by_id]
     if limit:
         sources = sources[:limit]
     gb = sum(s["size"] for s in sources) / 1e9
@@ -263,6 +267,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--upload", action="store_true", help="send; without it this is a dry run")
     ap.add_argument("--workers", type=int, default=1)
     ap.add_argument("--limit", type=int, default=0, help="only the first N sources")
+    ap.add_argument("--only", default="", help="a JSON file with a list of source ids: only these, in this order")
     ap.add_argument("--text-model", action="store_true", help="export the CLIP text model (torch, open_clip) and send it")
     a = ap.parse_args(argv)
     low_priority()
@@ -277,7 +282,11 @@ def main(argv: Optional[List[str]] = None) -> int:
                 r2.upload(path, stormlib.TEXT_MODEL_KEY, content_type="application/octet-stream", bucket=a.bucket,
                           base="https://private.invalid", deadline=time.time() + 1800)
                 print("text model sent")
-    push(os.path.abspath(a.kit), a.bucket, upload=a.upload, workers=a.workers, limit=a.limit)
+    only = None
+    if a.only:
+        with open(a.only, encoding="utf-8") as f:
+            only = [str(x) for x in json.load(f)]
+    push(os.path.abspath(a.kit), a.bucket, upload=a.upload, workers=a.workers, limit=a.limit, only=only)
     return 0
 
 

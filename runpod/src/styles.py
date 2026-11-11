@@ -31,7 +31,9 @@ only graphics (GRAPHICS_DENSITY minimal, no marks); suspense music, ducked.
 """
 from __future__ import annotations
 
-from typing import Dict
+from typing import Any, Dict
+
+from . import config
 
 # transitions: the cutting style src/timeline.py plans (timeline.STYLES:
 # documentary/history/story soft and rare, trending/compilation/explainer
@@ -355,6 +357,14 @@ def density(value) -> str:
     return _DENSITY.get(str(value or "").strip().lower(), "")
 
 
+FREE_STYLES = ("storm_desk",)
+FREE_CONFIG = {"VISION_ENABLED": False, "OFFTOPIC_AI": False, "HOOK_CUT_CHECK": False, "SOURCE_BANK_MODEL_MATCH": False}
+
+
+def _on(v: Any) -> bool:
+    return v is True or str(v).strip().lower() in ("1", "true", "yes", "on")
+
+
 def apply(inp: dict) -> str:
     """
     Fold the job's video_style into its input, in place, before config
@@ -379,6 +389,12 @@ def apply(inp: dict) -> str:
     merged = dict(spec.get("config") or {})
     if isinstance(inp.get("config"), dict):
         merged.update(inp["config"])
+    if style in FREE_STYLES and _on(merged.get("STORM_FREE", getattr(config, "STORM_FREE", True))):
+        # No paid model judges a shot (src/shotcheck.py, srcbank.review_local); a job's own setting still wins.
+        own = inp["config"] if isinstance(inp.get("config"), dict) else {}
+        for k, v in FREE_CONFIG.items():
+            merged[k] = own.get(k, v)
+        merged["STORM_FREE"] = True
     # The owner's Animations choice beats the style's own default.
     merged.setdefault("GRAPHICS_DENSITY", chosen or spec["graphics"])
     merged.setdefault("TRANSITION_STYLE", spec["transitions"])

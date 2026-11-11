@@ -1907,6 +1907,10 @@ USER_AGENT = f"ThumbGenius/2.0 (video worker; contact: {CONTACT_EMAIL})"
 # Empty, or equal to a bucket with a public domain, turns it off.
 R2_SDLIB_BUCKET = os.getenv("R2_SDLIB_BUCKET", "").strip()
 STORM_LIBRARY = _flag("STORM_LIBRARY", True)
+# The Breaking News Desk without paid checks (2026-11-11): the kit's local clean() on every shot (src/shotcheck.py),
+# CLIP for the source bank's review and matching, no vision judging of the per-line search, no off-topic model,
+# no hook model check, no AI pictures for empty shots. src/styles.py turns the paid switches off when this is on.
+STORM_FREE = _flag("STORM_FREE", True)
 STORM_STATION_SHOTS = int(os.getenv("STORM_STATION_SHOTS", "26"))      # one station channel a video (tools/channels.py)
 STORM_EMPTY_AI_MAX = int(os.getenv("STORM_EMPTY_AI_MAX", "12"))        # AI pictures the empty-shot ladder may make without a job's ai_fill
 R2_LIBRARY_BUCKET = os.getenv("R2_LIBRARY_BUCKET", "").strip()

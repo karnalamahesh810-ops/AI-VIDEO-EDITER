@@ -10,7 +10,8 @@ hook clips are exempt: real people talk there on purpose. AI shots are exempt to
 No empty scenes, ever: ensure_media walks every shot with no media down one ladder, in this order, and a build that still has
 one fails (EmptyShots) instead of delivering. Never a colour or a text card.
 
-    spare bank -> footage library -> other moments of already-approved originals -> AI fill -> the previous shot held
+    spare bank -> footage library -> other moments of already-approved originals -> the shot beside it running on (checked)
+    -> AI fill (off under the free checks unless a job asks) -> the previous shot held
 
 Thresholds are the kit's, measured on the same frame sizes: 3 frames at 320 px wide for OCR (text over 0.4% of the frame or a
 line of 6 characters), faces on those frames at 640 px, a face over 0.4% of the frame is a person on camera.
@@ -32,6 +33,8 @@ OCR_MIN_CONF = 0.6
 FRAMES_AT = (0.2, 0.5, 0.8)     # tools/framegrab.py
 FRAME_W = 320
 AUTOFIX_ROUNDS = 3
+# The kit's full clean() (dark, bars, pillarbox, faces, people, text; src/shotcheck.py) instead of faces + text only.
+FULL_CHECKS = os.getenv("STORM_FULL_CHECKS", "1").strip().lower() not in ("0", "false", "off", "no")
 FACESCAN_ROUNDS = 2
 PROMO_STEP = 1.5                # seconds between the pictures tried for a hook clip whose own has a promo on it
 MODEL = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sdkit", "models", "face_yunet.onnx")
@@ -229,6 +232,9 @@ def fallback_text(frames: Sequence[Any]) -> str:
 def scan_shots(doc: dict, cache: Dict[tuple, str], *, frames: Optional[Callable] = None, check: Optional[Callable] = None) -> List[Tuple[dict, str]]:
     """[(scene, why refused)] over the narrated shots; a shot already read is not read again."""
     fps = int(doc.get("fps") or 30)
+    if FULL_CHECKS:
+        from . import shotcheck
+        frames = frames or (lambda s: shot_frames(s, fps, spots=shotcheck.SPOTS, width=shotcheck.W))
     frames = frames or (lambda s: shot_frames(s, fps))
     check = check or _default_check
 
@@ -254,9 +260,33 @@ def scan_shots(doc: dict, cache: Dict[tuple, str], *, frames: Optional[Callable]
 
 
 def _default_check(frames: Sequence[Any]) -> str:
+    if FULL_CHECKS:
+        return _full_check(frames)
     if ocr_available():
         return check_frames(frames)
     return check_frames(frames, ocr=lambda _f: []) or fallback_text(frames)
+
+
+def _full_check(frames: Sequence[Any]) -> str:
+    """The kit's clean() on the shot as rendered (src/shotcheck.py): dark, black bars, a blurred pillarbox, a face, a person,
+    text. Without OCR on the machine the edge reading stands in for the text part."""
+    from . import shotcheck
+    text = None if ocr_available() else (lambda fr: fallback_text([fr]))
+    for fr in frames:
+        why = shotcheck.frame_reason(fr, text=text)
+        if why:
+            return {"face": "a person on camera (face)", "person": "a person on camera (body)"}.get(why, why)
+    return ""
+
+
+def _label(why: str) -> str:
+    w = str(why or "")
+    if w.startswith("a person"):
+        return "person"
+    for k in ("dark", "bars", "pillar", "read", "error"):
+        if w.startswith(k):
+            return k
+    return "text"
 
 
 def clear_scene(scene: dict, why: str) -> None:
@@ -314,7 +344,7 @@ def autofix(doc: dict, inp: dict, work: str, *, rounds: int = AUTOFIX_ROUNDS, fr
             mo = stormdesk.moment(s, fps)
             if mo:
                 reject(mo[0], mo[1], mo[2], why)
-            label = "person" if why.startswith("a person") else "text"
+            label = _label(why)
             rep["byReason"][label] = rep["byReason"].get(label, 0) + 1
             rep["rejected"] += 1
             clear_scene(s, why)
@@ -565,10 +595,75 @@ def _rung_originals(doc: dict, work: str) -> int:
     return n
 
 
+def _rung_stretch(doc: dict, *, check: Optional[Callable[[str, float, float, str], str]] = None,
+                  cut: Optional[Callable[[str, float, float], str]] = None) -> int:
+    """The kit's tools/merge_clean.py: an empty narrated shot shows its neighbour's take running on (the moment right after the
+    shot before it, or right before the shot after it), only when those frames pass the free checks and no earlier video or
+    other shot used them. Same source, continuous frames: the cut does not show. Never next to a pause or hook clip."""
+    from types import SimpleNamespace
+    from . import filters, shotcheck, stormdesk
+    fps = int(doc.get("fps") or 30)
+    scenes = sorted(doc.get("scenes") or [], key=lambda x: int(x["startFrame"]))
+    check = check or (lambda path, a, d, mode: shotcheck.check(path, a, d, shotcheck.vf_for_mode(path, mode)))
+    cut = cut or (lambda path, a, d: filters.trim_clip(path, a, d))
+    taken: Dict[str, List[Tuple[float, float]]] = {}
+    for x in scenes:
+        mo = stormdesk.moment(x, fps)
+        if mo:
+            taken.setdefault(mo[0], []).append((mo[1], mo[2]))
+    led = stormdesk.JOB_LEDGER
+
+    def free(vid: str, a: float, b: float) -> bool:
+        if any(min(b, q) - max(a, p) > 0.05 for p, q in taken.get(vid, [])):
+            return False
+        return not (led is not None and led.used(vid, a, b))
+    n = 0
+    for k, s in enumerate(scenes):
+        if has_picture(s) or s.get("natSound") or s.get("openClip"):
+            continue
+        d = int(s["durationInFrames"]) / float(fps)
+        for side in (-1, 1):
+            j = k + side
+            if not (0 <= j < len(scenes)):
+                continue
+            o = scenes[j]
+            if o.get("natSound") or o.get("openClip") or stormdesk.is_ai(o) or (o.get("media") or {}).get("type") != "video":
+                continue
+            mo = stormdesk.moment(o, fps)
+            if not mo:
+                continue
+            vid, a0, b0 = mo
+            path = stormdesk._source_file(vid[3:])
+            if not path:
+                continue
+            a = b0 if side < 0 else a0 - d
+            if a < 0 or not free(vid, a, a + d):
+                continue
+            mode = str((o.get("stormDesk") or {}).get("mode") or "full")
+            if check(path, a, d, mode):
+                continue
+            clip = cut(path, a, d)
+            if not clip:
+                continue
+            sm = o.get("semanticMetadata") if isinstance(o.get("semanticMetadata"), dict) else {}
+            asset = SimpleNamespace(moment={"start": a}, url=f"https://www.youtube.com/watch?v={vid[3:]}", local_path=clip,
+                                    channel=sm.get("channel") or "", duration=d, attribution=(o.get("media") or {}).get("attribution") or "",
+                                    license=(o.get("media") or {}).get("license") or "", content_description=sm.get("contentDescription") or "",
+                                    upload_date=sm.get("uploadDate") or "")
+            apply_asset(s, asset, "the shot beside it running on")
+            if mode != "full":
+                s.setdefault("stormDesk", {})["mode"] = mode
+            taken.setdefault(vid, []).append((a, a + d))
+            n += 1
+            break
+    return n
+
+
 def _rung_ai(doc: dict, inp: dict, work: str) -> int:
     """AI pictures for what is left (Avatarity, then OpenRouter), the job's own ai_fill block or a small one of the style's own."""
     from . import aifill, config, stormdesk
-    if stormdesk.options(inp).get("ai_fill_empty", True) is False:
+    # Paid pictures: off by default under the free checks (config.STORM_FREE); a job asks with ai_fill_empty true.
+    if stormdesk.options(inp).get("ai_fill_empty", not getattr(config, "STORM_FREE", False)) is False:
         return 0
     todo = empty_scenes(doc)
     if not todo:
@@ -607,6 +702,7 @@ def ensure_media(doc: dict, inp: dict, work: str, *, allow_hold: bool = True, ru
         "spare": lambda: _rung_spare(doc),
         "library": lambda: _rung_library(doc, inp, work),
         "originals": lambda: _rung_originals(doc, work),
+        "stretch": lambda: _rung_stretch(doc),
         "ai": lambda: _rung_ai(doc, inp, work),
         "hold": lambda: _rung_hold(doc),
     }).items())
